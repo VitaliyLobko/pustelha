@@ -11,13 +11,16 @@ const KEY = 'pustelha:sim';
 // Кут огляду камери по ширині кадру — типовий для дронів; кратність звужує його
 const HFOV = 80 * Math.PI / 180;
 // Цілі схемою — знаками APP-6 / MIL-STD-2525 для противника: червоний ромб, усередині — рід військ.
-// size — справжній розмір на землі (м), по ньому рахується влучання; знак малюється не дрібніше за SYM_MIN px
+// len × wid — справжні габарити згори (м): довжина — по ходу руху; по них малюємо силует і рахуємо влучання.
+// Людина — плечі 0,5 × 0,3 м; БМП-2 — 6,7 × 3,2; Т-72 — корпус 6,9 × 3,6; бліндаж на відділення — 5 × 3
 const KINDS = [
-  { id: 'inf', name: 'Піхота', what: 'жива сила', size: 1, count: 5, icon: 'inf' },
-  { id: 'mech', name: 'БМП', what: 'механізована піхота', size: 4, count: 3, icon: 'mech' },
-  { id: 'tank', name: 'Танк', what: 'бронетехніка', size: 5, count: 2, icon: 'armor' },
-  { id: 'dug', name: 'Бліндаж', what: 'укриття', size: 4, count: 2, icon: 'fort' },
+  { id: 'inf', name: 'Піхота', what: 'жива сила', len: 0.3, wid: 0.5, count: 5, icon: 'inf' },
+  { id: 'mech', name: 'БМП', what: 'механізована піхота', len: 6.7, wid: 3.2, count: 3, icon: 'mech' },
+  { id: 'tank', name: 'Танк', what: 'бронетехніка', len: 6.9, wid: 3.6, count: 2, icon: 'armor' },
+  { id: 'dug', name: 'Бліндаж', what: 'укриття', len: 5, wid: 3, count: 2, icon: 'fort' },
 ];
+const m1 = (v) => fmt(v, v % 1 ? 1 : 0);
+const dims = (k) => (k.len < 1 ? `${m1(k.wid)} × ${m1(k.len)} м` : `${m1(k.len)} × ${m1(k.wid)} м`);
 /** Знак APP-6 для плиток і кнопки «Ціль» — той самий, що на кадрі. */
 const SYM = (icon) => `<svg class="tgt-sym" viewBox="0 0 34 30" aria-hidden="true"><path class="s-hos" d="M17 3 29 15 17 27 5 15Z"/>${
   icon === 'inf' || icon === 'mech' ? '<path class="s-in" d="M11 9 23 21M23 9 11 21"/>' : ''}${
@@ -134,9 +137,12 @@ export function initSim({ loads, loadById }) {
       for (let tries = 0; tries < 40; tries++) {
         const e = (rnd() - 0.5) * span * 0.8, n = (rnd() - 0.5) * span * 0.8;
         // Не одна на одній і не просто під прицілом
-        if (Math.hypot(e, n) < k.size * 2 + span * 0.08) continue;
-        if (targets.some((t) => Math.hypot(t.e - e, t.n - n) < k.size * 2.5)) continue;
-        targets.push({ e, n, size: k.size, dir: rnd() * 2 * Math.PI, hit: false });
+        // Піхота — не ближче 3 м одна від одної, як у розосередженому порядку; на великій кратності кадр малий — відступи менші
+        const gapM = Math.min(Math.max(3, k.len * 1.5), span * 0.25);
+        const last = tries === 39;
+        if (!last && Math.hypot(e, n) < gapM + span * 0.08) continue;
+        if (!last && targets.some((t) => Math.hypot(t.e - e, t.n - n) < gapM)) continue;
+        targets.push({ e, n, len: k.len, wid: k.wid, dir: rnd() * 2 * Math.PI, hit: false });
         break;
       }
     }
@@ -151,50 +157,65 @@ export function initSim({ loads, loadById }) {
   }
 
   /* --- земля: плями трави й ґрунту, кущі, польова дорога — у метрах, щоб масштабувались з кратністю --- */
+  // Місцевість — клітинками по 20 м, у кожної свій генератор: політ, висота й кратність показують ту саму землю
+  const CELL = 20;
+  const cellRnd = (ix, iy, salt) => mulberry32((round.seed ^ Math.imul(ix, 73856093) ^ Math.imul(iy, 19349663) ^ salt) >>> 0);
+  /** Пройти видимі клітинки (з запасом на найбільшу пляму) і для кожної — її генератор і кут у метрах. */
+  function eachCell(salt, fn) {
+    const half = spanM() / 2 + 14;
+    const [e0, e1] = [Math.floor((cam.e - half) / CELL), Math.floor((cam.e + half) / CELL)];
+    const [n0, n1] = [Math.floor((cam.n - half) / CELL), Math.floor((cam.n + half) / CELL)];
+    for (let ix = e0; ix <= e1; ix++) for (let iy = n0; iy <= n1; iy++) fn(cellRnd(ix, iy, salt), ix * CELL, iy * CELL);
+  }
   function paintGround() {
     const g = document.createElement('canvas');
     g.width = g.height = Math.round(side * dpr);
     const c = g.getContext('2d');
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const rnd = mulberry32(round.seed ^ 0x9e3779b9);
-    // Землю малюємо на весь кадр при 1× — щоб кратність не міняла місцевість
-    const R = state.height * Math.tan(HFOV / 2);
     c.fillStyle = '#6d7746';
     c.fillRect(0, 0, side, side);
-    const area = (2 * R) ** 2;
+    const visible = (x, y, r) => !(x < -r || y < -r || x > side + r || y > side + r);
     const PATCH = ['#66703f', '#7a8550', '#5d6838', '#857f55', '#727045', '#5f6a3a'];
-    for (let i = 0; i < area / 120; i++) {
-      const [x, y] = toS((rnd() - 0.5) * 2 * R, (rnd() - 0.5) * 2 * R);
-      const r = (2 + rnd() * 12) * ppm;
-      if (x < -r || y < -r || x > side + r || y > side + r) continue;
-      c.globalAlpha = 0.35 + rnd() * 0.35;
-      c.fillStyle = PATCH[Math.floor(rnd() * PATCH.length)];
-      c.beginPath();
-      c.ellipse(x, y, r, r * (0.5 + rnd() * 0.5), rnd() * Math.PI, 0, 2 * Math.PI);
-      c.fill();
-    }
-    // Польова дорога через кадр
+    // Пляма на 120 м², кущ — на 60 м²: усі випадкові числа беремо до перевірки видимості, щоб не збити послідовність
+    eachCell(0x51ed27, (rnd, e, n) => {
+      for (let i = 0, k = Math.floor(CELL * CELL / 120 + rnd()); i < k; i++) {
+        const pe = e + rnd() * CELL, pn = n + rnd() * CELL, r = (2 + rnd() * 12) * ppm;
+        const a = 0.35 + rnd() * 0.35, col = PATCH[Math.floor(rnd() * PATCH.length)], q = 0.5 + rnd() * 0.5, ang = rnd() * Math.PI;
+        const [x, y] = toS(pe, pn);
+        if (!visible(x, y, r)) continue;
+        c.globalAlpha = a;
+        c.fillStyle = col;
+        c.beginPath();
+        c.ellipse(x, y, r, r * q, ang, 0, 2 * Math.PI);
+        c.fill();
+      }
+    });
+    // Польова дорога через усе поле
+    const rr = mulberry32(round.seed ^ 0x9e3779b9);
+    const [y0, yb, y1] = [(rr() - 0.5) * 120, (rr() - 0.5) * 120, (rr() - 0.5) * 120];
     c.globalAlpha = 0.8;
     c.strokeStyle = '#8f8461';
     c.lineWidth = Math.max(2, 3.5 * ppm);
     c.lineCap = 'round';
     c.beginPath();
-    const y0 = (rnd() - 0.5) * R, y1 = (rnd() - 0.5) * R;
-    const [ax, ay] = toS(-R, y0), [bx, by] = toS(0, (rnd() - 0.5) * R), [dx, dy] = toS(R, y1);
+    const [ax, ay] = toS(-700, y0), [bx, by] = toS(0, yb), [dx, dy] = toS(700, y1);
     c.moveTo(ax, ay);
     c.quadraticCurveTo(bx, by, dx, dy);
     c.stroke();
     // Кущі
-    for (let i = 0; i < area / 60; i++) {
-      const [x, y] = toS((rnd() - 0.5) * 2 * R, (rnd() - 0.5) * 2 * R);
-      const r = (0.4 + rnd() * 1.2) * ppm;
-      if (x < -r || y < -r || x > side + r || y > side + r) continue;
-      c.globalAlpha = 0.55 + rnd() * 0.3;
-      c.fillStyle = rnd() < 0.5 ? '#3f4a2a' : '#4b5632';
-      c.beginPath();
-      c.arc(x, y, Math.max(0.6, r), 0, 2 * Math.PI);
-      c.fill();
-    }
+    eachCell(0x2c1b3c, (rnd, e, n) => {
+      for (let i = 0, k = Math.floor(CELL * CELL / 60 + rnd()); i < k; i++) {
+        const pe = e + rnd() * CELL, pn = n + rnd() * CELL, r = Math.max(0.6, (0.4 + rnd() * 1.2) * ppm);
+        const a = 0.55 + rnd() * 0.3, col = rnd() < 0.5 ? '#3f4a2a' : '#4b5632';
+        const [x, y] = toS(pe, pn);
+        if (!visible(x, y, r)) continue;
+        c.globalAlpha = a;
+        c.fillStyle = col;
+        c.beginPath();
+        c.arc(x, y, r, 0, 2 * Math.PI);
+        c.fill();
+      }
+    });
     c.globalAlpha = 1;
     ground = g;
   }
@@ -289,20 +310,85 @@ export function initSim({ loads, loadById }) {
     drawReticle(...toS(reticle.e, reticle.n));
   }
 
-  /** Ціль: справжній слід на землі (по ньому влучання) і знак противника APP-6 поверх — щоб читався на будь-якій кратності. */
+  /** Силует цілі згори в справжньому масштабі: людина, корпус з баштою й гарматою, накат бліндажа. */
+  function drawBody(t, x, y) {
+    const icon = round.kind.icon;
+    ctx.save();
+    ctx.translate(x, y);
+    // На екрані північ угорі, тож кут руху дзеркалимо
+    ctx.rotate(-t.dir);
+    const L = t.len * ppm, W = t.wid * ppm;
+    if (icon === 'inf') {
+      // Людина — темна пляма; менше 1,2 px не малюємо, інакше зникне зовсім
+      ctx.fillStyle = '#23261a';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, Math.max(0.6, L / 2), Math.max(0.6, W / 2), 0, 0, 2 * Math.PI);
+      ctx.fill();
+    } else if (icon === 'fort') {
+      ctx.fillStyle = '#5b4b33';
+      ctx.fillRect(-L / 2, -W / 2, L, W);
+      // Колоди накату поперек
+      ctx.strokeStyle = 'rgb(40 32 20 / .7)';
+      ctx.lineWidth = Math.max(0.5, 0.15 * ppm);
+      ctx.beginPath();
+      for (let i = 1; i < 6; i++) { const lx = -L / 2 + (L * i) / 6; ctx.moveTo(lx, -W / 2); ctx.lineTo(lx, W / 2); }
+      ctx.stroke();
+    } else {
+      // Корпус, башта ближче до центру, гармата вперед по ходу
+      const tank = icon === 'armor';
+      ctx.fillStyle = '#3d4230';
+      ctx.fillRect(-L / 2, -W / 2, L, W);
+      ctx.strokeStyle = '#1d2016';
+      ctx.lineWidth = Math.max(0.5, 0.1 * ppm);
+      ctx.strokeRect(-L / 2, -W / 2, L, W);
+      const tr = (tank ? 1.15 : 0.7) * ppm, tx = tank ? -0.3 * ppm : 0.2 * ppm;
+      ctx.fillStyle = '#2f3325';
+      ctx.beginPath();
+      ctx.arc(tx, 0, tr, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(tx + tr, 0);
+      ctx.lineTo(tx + (tank ? 4.6 : 2.6) * ppm, 0);
+      ctx.lineWidth = Math.max(0.6, (tank ? 0.16 : 0.1) * ppm);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /**
+   * Ціль: силует у справжньому масштабі (по ньому влучання) і знак противника APP-6 міткою над ним — щоб ціль
+   * було видно на будь-якій висоті, а сам знак її не закривав. Коли силует великий, мітка вже не потрібна.
+   */
   function drawTarget(t, active) {
     const [x, y] = toS(t.e, t.n);
-    const s = t.size * ppm;
-    const d = Math.max(SYM_MIN, s) / 2;
+    const s = Math.max(t.len, t.wid) * ppm;
     ctx.globalAlpha = t.hit ? 0.45 : 1;
-    // Знак більший за ціль — показуємо її справжній розмір пунктиром
-    if (d * 2 > s + 4) {
-      ctx.strokeStyle = 'rgb(255 255 255 / .8)';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([2, 2]);
-      ctx.strokeRect(x - s / 2, y - s / 2, s, s);
-      ctx.setLineDash([]);
+    drawBody(t, x, y);
+    if (active && !t.hit) {
+      // Вибрана ціль — жовті кутики навколо силуету
+      const r = Math.max(7, s / 2 + 4), k = Math.min(8, r * 0.5);
+      ctx.strokeStyle = '#ffd24a';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+        ctx.moveTo(x + sx * r, y + sy * (r - k)); ctx.lineTo(x + sx * r, y + sy * r); ctx.lineTo(x + sx * (r - k), y + sy * r);
+      }
+      ctx.stroke();
     }
+    if (t.hit) { ctx.globalAlpha = 1; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; cross(x, y, Math.max(6, s * 0.6)); }
+    if (s < SYM_MIN * 1.5) drawMark(x, y - Math.max(7, s / 2 + 4), t.hit);
+    ctx.globalAlpha = 1;
+  }
+
+  /** Знак APP-6 міткою: ромб на ніжці, вістря ніжки — над ціллю. */
+  function drawMark(x, foot, hit) {
+    const d = SYM_MIN / 2, y = foot - 10 - d;
+    ctx.globalAlpha = hit ? 0.35 : 0.85;
+    ctx.strokeStyle = 'rgb(255 255 255 / .85)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(x, foot); ctx.lineTo(x, y + d);
+    ctx.stroke();
     // Рамка противника — ромб, заливка світло-червона (APP-6: hostile)
     ctx.beginPath();
     ctx.moveTo(x, y - d); ctx.lineTo(x + d, y); ctx.lineTo(x, y + d); ctx.lineTo(x - d, y); ctx.closePath();
@@ -334,19 +420,6 @@ export function initSim({ loads, loadById }) {
       ctx.textBaseline = 'middle';
       ctx.fillText('Б', x, y + 1);
     }
-    if (active && !t.hit) {
-      // Вибрана ціль — жовті кутики навколо
-      const r = d + 5, k = Math.min(8, r * 0.5);
-      ctx.strokeStyle = '#ffd24a';
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
-        ctx.moveTo(x + sx * r, y + sy * (r - k)); ctx.lineTo(x + sx * r, y + sy * r); ctx.lineTo(x + sx * (r - k), y + sy * r);
-      }
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-    if (t.hit) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; cross(x, y, d * 0.7); }
   }
 
   function cross(x, y, r) {
@@ -441,7 +514,11 @@ export function initSim({ loads, loadById }) {
   function land(b, now) {
     b.done = true;
     const e = b.e0 + b.r.y, n = b.n0 + b.r.x;
-    const gap = (t) => Math.hypot(Math.max(Math.abs(e - t.e) - t.size / 2, 0), Math.max(Math.abs(n - t.n) - t.size / 2, 0));
+    // Відстань від точки падіння до краю цілі — у її власних осях: уздовж руху й поперек
+    const gap = (t) => {
+      const de = e - t.e, dn = n - t.n, c = Math.cos(t.dir), s = Math.sin(t.dir);
+      return Math.hypot(Math.max(Math.abs(de * c + dn * s) - t.len / 2, 0), Math.max(Math.abs(-de * s + dn * c) - t.wid / 2, 0));
+    };
     const icon = round.kind.icon;
     const eff = effect(b.load, icon);
     const R = radii(b.load);
@@ -553,8 +630,12 @@ export function initSim({ loads, loadById }) {
   cv.addEventListener('pointerdown', (e) => {
     cv.setPointerCapture(e.pointerId);
     fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (fingers.size === 1) gest = { mode: 'aim', x: e.clientX, y: e.clientY };
-    else if (fingers.size === 2) gest = { mode: null, ...pair(), z0: state.zoom, c0: { ...cam }, r0: { ...reticle } };
+    if (fingers.size === 1) gest = { mode: 'aim', x: e.clientX, y: e.clientY, t: performance.now(), r: { ...reticle } };
+    else if (fingers.size === 2) {
+      // Другий палець ліг одразу за першим — це жест двома пальцями, а не прицілювання: приціл повертаємо
+      if (gest?.mode === 'aim' && performance.now() - gest.t < 300) Object.assign(reticle, gest.r);
+      gest = { mode: null, ...pair(), z0: state.zoom, c0: { ...cam }, r0: { ...reticle } };
+    }
   });
   cv.addEventListener('pointermove', (e) => {
     const f = fingers.get(e.pointerId);
@@ -578,7 +659,8 @@ export function initSim({ loads, loadById }) {
       else return;
     }
     if (gest.mode === 'zoom') setView({ zoom: Math.max(1, Math.min(8, Math.round(gest.z0 * p.d / gest.d))) });
-    else pan(gest.c0.e - (p.x - gest.x) / ppm, gest.c0.n + (p.y - gest.y) / ppm);
+    // Дрон летить туди, куди ведуть пальці, — як приціл одним пальцем; земля в кадрі пливе назустріч
+    else pan(gest.c0.e + (p.x - gest.x) / ppm, gest.c0.n - (p.y - gest.y) / ppm);
   });
   const endGest = (e) => {
     fingers.delete(e.pointerId);
@@ -824,7 +906,7 @@ export function initSim({ loads, loadById }) {
   const tgtNote = el('p', { class: 'tgt-note' });
   const tgtWheel = wheelStrip(tgtStrip, (b) => {
     const k = KINDS.find((x) => x.id === b.dataset.v);
-    tgtNote.textContent = `${k.name}: ${k.what}, ${fmt(k.size, 0)} м · ${takes(k.icon)}`;
+    tgtNote.textContent = `${k.name}: ${k.what}, ${dims(k)} · ${takes(k.icon)}`;
   });
   $('sim-tgt').append(tgtStrip, tgtNote);
   $('sim-move').append(el('div', { class: 'chips' }, MOVES.map((m) => el('button', {

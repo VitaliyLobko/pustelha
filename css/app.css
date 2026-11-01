@@ -337,7 +337,7 @@ input[readonly] { color: var(--muted); background: transparent; }
 :is(.lg-sym, .tgt-sym) .s-hos { fill: rgb(255 128 128 / .88); stroke: #111; stroke-width: 1.3; }
 :is(.lg-sym, .tgt-sym) .s-in { stroke: #111; stroke-width: 1.3; }
 :is(.lg-sym, .tgt-sym) .s-txt { fill: #111; stroke: none; font: 700 10px system-ui, sans-serif; text-anchor: middle; }
-:is(.lg-sym, .tgt-sym) .s-foot { stroke: #fff; stroke-width: 1; stroke-dasharray: 1.5 1.5; }
+:is(.lg-sym, .tgt-sym) .s-body { fill: #3d4230; stroke: #1d2016; stroke-width: 1; }
 :is(.lg-sym, .tgt-sym) .s-sel { stroke: #ffd24a; stroke-width: 2; }
 :is(.lg-sym, .tgt-sym) .s-hit { stroke: #fff; stroke-width: 1.8; }
 :is(.lg-sym, .tgt-sym) .s-crater { fill: rgb(40 34 26 / .75); }
