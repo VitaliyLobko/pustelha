@@ -313,6 +313,21 @@ input[readonly] { color: var(--muted); background: transparent; }
 .sim-help p { margin: 0; }
 .sim-legend { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .sim-legend li { display: grid; grid-template-columns: 34px 1fr; gap: 10px; align-items: start; line-height: 1.4; }
+.lg-head { margin: 6px 0 0; font-size: 14px; color: var(--accent-2); }
+/* Знаки легенди — на кольорі землі з кадру, тими самими фарбами, що й на кадрі */
+.lg-sym { width: 34px; height: 30px; border-radius: 9px; background: #6d7746; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.lg-sym .s-hos { fill: rgb(255 128 128 / .88); stroke: #111; stroke-width: 1.3; }
+.lg-sym .s-in { stroke: #111; stroke-width: 1.3; }
+.lg-sym .s-txt { fill: #111; stroke: none; font: 700 10px system-ui, sans-serif; text-anchor: middle; }
+.lg-sym .s-foot { stroke: #fff; stroke-width: 1; stroke-dasharray: 1.5 1.5; }
+.lg-sym .s-sel { stroke: #ffd24a; stroke-width: 2; }
+.lg-sym .s-hit { stroke: #fff; stroke-width: 1.8; }
+.lg-sym .s-crater { fill: rgb(40 34 26 / .75); }
+.lg-sym .s-miss { stroke: #fff; stroke-width: 1.3; }
+.lg-sym .s-mark { stroke: #ff6b5a; stroke-width: 1.3; }
+.lg-sym .s-ret { stroke: #fff; stroke-width: 1.5; }
+.lg-sym .s-hint { stroke: #79aaf0; stroke-width: 1.3; stroke-dasharray: 2 1.5; }
+:root[data-theme="night"] .lg-sym { filter: grayscale(1) sepia(1) saturate(5) hue-rotate(-40deg) brightness(.42); }
 .lg-ico { display: grid; place-items: center; width: 34px; height: 30px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); font-size: 15px; }
 
 /* Підказка, вантаж, нова ситуація — один рядок */
