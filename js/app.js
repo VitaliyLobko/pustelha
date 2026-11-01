@@ -323,7 +323,7 @@ function render() {
       ? `Щоб влучити: зависни так, щоб ціль була ${where(r.x, r.y)} від точки під дроном — дрон стоїть проти вітру від цілі.`
       : `Щоб влучити: у момент скиду ціль має бути ${where(r.x, r.y)} від точки під дроном.`));
   lines.push(el('li', {}, `Бойова частина: ${describe(load)} від краю цілі.`));
-  lines.push(el('li', { class: 'small muted' }, 'Точка під дроном = центр кадру, лише коли камера дивиться строго вниз (−90°). Як саме рахуємо — ⚙ → «Як рахуємо».'));
+  lines.push(el('li', { class: 'small muted' }, 'Точка під дроном = центр кадру, лише коли камера дивиться строго вниз (−90°). Як саме рахуємо — «Налаштування» → «Як рахуємо».'));
 
   out.replaceChildren(
     el('h2', {}, 'Куди впаде'),
@@ -530,7 +530,7 @@ function registerSW() {
   });
 }
 
-/* --- вкладки: тренажер і розрахунок; ⚙ — налаштування поверх них --- */
+/* --- розділи в нижній панелі: тренажер, розрахунок, налаштування --- */
 const TAB_KEY = 'pustelha:tab';
 let sim = null;
 let tabNow = 'sim';
@@ -545,7 +545,7 @@ function playTab(tab) {
   tabPlay = setTimeout(() => b.classList.remove('play'), 2600);
 }
 function showTab(tab, { play = true } = {}) {
-  if (play && (tab !== tabNow || !$('pane-set').hidden)) playTab(tab);
+  if (play && tab !== tabNow) playTab(tab);
   tabNow = tab;
   for (const b of document.querySelectorAll('.tabs button')) {
     b.classList.toggle('on', b.dataset.tab === tab);
@@ -553,9 +553,10 @@ function showTab(tab, { play = true } = {}) {
   }
   $('pane-sim').hidden = tab !== 'sim';
   $('pane-calc').hidden = tab !== 'calc';
-  $('pane-set').hidden = true;
-  $('gear').setAttribute('aria-pressed', 'false');
-  write(TAB_KEY, tab);
+  $('pane-set').hidden = tab !== 'set';
+  // Налаштування — не стартовий розділ: після перезапуску відкриваємо той, де тренувався
+  if (tab !== 'set') write(TAB_KEY, tab);
+  if (tab === 'set') renderSettings($('pane-set'));
   if (tab === 'sim') {
     sim ??= initSim({ loads: allLoads, loadById: (id) => allLoads().find((l) => l.id === id) || PRESETS[1] });
     sim.show();
@@ -563,20 +564,6 @@ function showTab(tab, { play = true } = {}) {
 }
 for (const b of document.querySelectorAll('.tabs button')) b.addEventListener('click', () => showTab(b.dataset.tab));
 
-function showSettings() {
-  for (const b of document.querySelectorAll('.tabs button')) {
-    b.classList.remove('on');
-    b.setAttribute('aria-selected', 'false');
-  }
-  $('pane-sim').hidden = $('pane-calc').hidden = true;
-  renderSettings($('pane-set'));
-  $('pane-set').hidden = false;
-  $('gear').setAttribute('aria-pressed', 'true');
-}
-// Повторний тап по ⚙ — назад туди, звідки прийшов
-$('gear').addEventListener('click', () => ($('pane-set').hidden ? showSettings() : showTab(tabNow)));
-
-$('ver').textContent = `v${self.APP_VERSION}`;
 $('calc-wind').append(calcWind.el);
 bindPairs();
 bindWind();
