@@ -1,8 +1,9 @@
 // Тренажер скиду: вид з камери вниз, приціл — точка під дроном, тягнеться пальцем; цілі поки квадратами.
 import { simulate } from './ballistics.js';
-import { $, el, fmt, read, write, vibrate, clockWord, where } from './ui.js';
+import { $, el, fmt, read, write, vibrate, clockWord, where, wheelStrip } from './ui.js';
 import { windPicker } from './wind-pick.js';
 import { RENEW_MODES, RENEW_NOTE, renewPref, setRenew } from './settings.js';
+import { WARHEADS, warhead, radii, effect, whyNot, describe } from './warhead.js';
 
 const KEY = 'pustelha:sim';
 // Кут огляду камери по ширині кадру — типовий для дронів; кратність звужує його
@@ -10,11 +11,23 @@ const HFOV = 80 * Math.PI / 180;
 // Цілі схемою — знаками APP-6 / MIL-STD-2525 для противника: червоний ромб, усередині — рід військ.
 // size — справжній розмір на землі (м), по ньому рахується влучання; знак малюється не дрібніше за SYM_MIN px
 const KINDS = [
-  { id: 'inf', name: 'Піхота', size: 1, count: 5, icon: 'inf' },
-  { id: 'mech', name: 'БМП', size: 4, count: 3, icon: 'mech' },
-  { id: 'tank', name: 'Танк', size: 5, count: 2, icon: 'armor' },
-  { id: 'dug', name: 'Бліндаж', size: 4, count: 2, icon: 'fort' },
+  { id: 'inf', name: 'Піхота', what: 'жива сила', size: 1, count: 5, icon: 'inf' },
+  { id: 'mech', name: 'БМП', what: 'механізована піхота', size: 4, count: 3, icon: 'mech' },
+  { id: 'tank', name: 'Танк', what: 'бронетехніка', size: 5, count: 2, icon: 'armor' },
+  { id: 'dug', name: 'Бліндаж', what: 'укриття', size: 4, count: 2, icon: 'fort' },
 ];
+/** Знак APP-6 для плиток і кнопки «Ціль» — той самий, що на кадрі. */
+const SYM = (icon) => `<svg class="tgt-sym" viewBox="0 0 34 30" aria-hidden="true"><path class="s-hos" d="M17 3 29 15 17 27 5 15Z"/>${
+  icon === 'inf' || icon === 'mech' ? '<path class="s-in" d="M11 9 23 21M23 9 11 21"/>' : ''}${
+  icon === 'armor' || icon === 'mech' ? '<ellipse class="s-in" cx="17" cy="15" rx="4.5" ry="2.7"/>' : ''}${
+  icon === 'fort' ? '<text class="s-txt" x="17" y="19.5">Б</text>' : ''}</svg>`;
+/** Які БЧ беруть ціль — з тієї ж таблиці, що й рахунок влучань. */
+function takes(icon) {
+  const by = (e) => WARHEADS.filter((w) => effect({ type: w.id }, icon) === e).map((w) => w.name.toLowerCase());
+  const r = by('radius'), d = by('direct');
+  if (r.length === WARHEADS.length) return 'бере будь-яка БЧ у радіусі ураження';
+  return [r.length && `${r.join(' чи ')} — у радіусі`, d.length && `${d.join(' чи ')} — лише прямим влучанням`].filter(Boolean).join(', ');
+}
 const SYM_MIN = 26;
 const MOVES = [
   { v: 0, name: 'стоїть' },
@@ -167,6 +180,18 @@ export function initSim({ loads, loadById }) {
       ctx.lineWidth = 1.5;
       cross(x, y, 4);
     }
+    const L = round.last;
+    if (L?.eff === 'radius') {
+      // Зони останнього скиду: червона — ураження, помаранчева — поранення
+      const [x, y] = toS(L.e, L.n);
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([5, 4]);
+      for (const [r, c] of [[L.R.wound, 'rgb(255 179 71 / .85)'], [L.R.kill, 'rgb(255 90 74 / .95)']]) {
+        ctx.strokeStyle = c;
+        ctx.beginPath(); ctx.arc(x, y, r * ppm, 0, 2 * Math.PI); ctx.stroke();
+      }
+      ctx.setLineDash([]);
+    }
     round.targets.forEach((t, i) => drawTarget(t, i === round.active));
     if (state.hint && hint) {
       const [x0, y0] = toS(reticle.e, reticle.n);
@@ -175,7 +200,9 @@ export function initSim({ loads, loadById }) {
       ctx.lineWidth = 1.5;
       ctx.setLineDash([4, 3]);
       ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x, y); ctx.stroke();
-      ctx.beginPath(); ctx.arc(x, y, 7, 0, 2 * Math.PI); ctx.stroke();
+      const ld = loadById(state.load);
+      const rk = effect(ld, round.kind.icon) === 'radius' ? radii(ld).kill * ppm : 0;
+      ctx.beginPath(); ctx.arc(x, y, Math.max(7, rk), 0, 2 * Math.PI); ctx.stroke();
       ctx.setLineDash([]);
     }
     const now = performance.now();
@@ -195,7 +222,7 @@ export function initSim({ loads, loadById }) {
       const [x, y] = toS(b.e, b.n);
       ctx.globalAlpha = 1 - k;
       ctx.fillStyle = '#ffb347';
-      ctx.beginPath(); ctx.arc(x, y, (0.6 + 2.4 * k) * Math.max(ppm, 4), 0, 2 * Math.PI); ctx.fill();
+      ctx.beginPath(); ctx.arc(x, y, Math.max(6, b.r * ppm) * (0.3 + 0.7 * k), 0, 2 * Math.PI); ctx.fill();
       ctx.globalAlpha = 1;
     }
     drawReticle(...toS(reticle.e, reticle.n));
@@ -336,7 +363,7 @@ export function initSim({ loads, loadById }) {
   function drop() {
     const load = loadById(state.load);
     const r = simulate(params(), load, { dt: DT, track: true });
-    bombs.push({ e0: reticle.e, n0: reticle.n, path: r.path, T: r.time, r, t0: performance.now() });
+    bombs.push({ e0: reticle.e, n0: reticle.n, path: r.path, T: r.time, r, load, t0: performance.now() });
     round.drops++;
     vibrate(15);
     paintScore();
@@ -347,21 +374,31 @@ export function initSim({ loads, loadById }) {
     b.done = true;
     const e = b.e0 + b.r.y, n = b.n0 + b.r.x;
     const gap = (t) => Math.hypot(Math.max(Math.abs(e - t.e) - t.size / 2, 0), Math.max(Math.abs(n - t.n) - t.size / 2, 0));
-    // Влучання — у будь-яку ціль у сліді; промах — відносно вибраної
-    const struck = round.targets.find((t) => !t.hit && gap(t) === 0);
+    const icon = round.kind.icon;
+    const eff = effect(b.load, icon);
+    const R = radii(b.load);
+    const alive = round.targets.filter((t) => !t.hit);
+    // У зоні ураження — усі цілі одразу; броню й перекриття — лише пряме влучання; none — ця БЧ ціль не бере
+    const reach = eff === 'radius' ? R.kill : 0;
+    const struck = eff === 'none' ? [] : alive.filter((t) => gap(t) <= reach);
+    const wounded = eff === 'radius' ? alive.filter((t) => !struck.includes(t) && gap(t) <= R.wound).length : 0;
+    const direct = eff === 'none' && alive.some((t) => gap(t) === 0);
+    // Промах рахуємо від вибраної цілі
     const aim = round.targets[round.active];
-    const ref = struck || (aim && !aim.hit ? aim : null);
+    const ref = struck[0] || (aim && !aim.hit ? aim : null);
     const best = ref && { t: ref, d: gap(ref), de: e - ref.e, dn: n - ref.n };
-    const hit = !!struck;
-    if (hit) {
-      struck.hit = true;
-      round.hits++;
+    for (const t of struck) t.hit = true;
+    round.hits += struck.length;
+    if (struck.length) {
       vibrate([30, 40, 30]);
-      if (struck === aim) nextTarget();
+      if (aim?.hit) nextTarget();
     }
-    round.craters.push({ e, n, hit });
-    bursts.push({ e, n, t0: now });
-    round.last = { hit, best, T: b.T, drift: Math.hypot(b.r.x, b.r.y), dx: b.r.x, dy: b.r.y, no: round.drops };
+    round.craters.push({ e, n, hit: struck.length > 0 });
+    bursts.push({ e, n, t0: now, r: Math.max(1, R.kill) });
+    round.last = {
+      killed: struck.length, wounded, direct, eff, R, why: eff === 'none' ? whyNot(b.load, icon) : '',
+      e, n, best, T: b.T, drift: Math.hypot(b.r.x, b.r.y), dx: b.r.x, dy: b.r.y, no: round.drops,
+    };
     paintScore();
     paintOut();
   }
@@ -376,19 +413,34 @@ export function initSim({ loads, loadById }) {
       rows.push(row('Як', 'тягни приціл пальцем на ціль і тисни «Скид»'));
     } else if (!L.best) {
       rows.push(row(`Скид ${L.no}`, el('span', { class: 'v' }, 'цілей не лишилось')));
-    } else if (L.hit) {
-      rows.push(row(`Скид ${L.no}`, el('span', { class: 'v good' }, `влучання — ${round.kind.name.toLowerCase()}`)));
+    } else if (L.killed) {
+      const name = round.kind.name.toLowerCase();
+      rows.push(row(`Скид ${L.no}`, el('span', {},
+        el('span', { class: 'v good' }, L.killed > 1 ? `уражено ${L.killed} — ${name}` : `уражено — ${name}`),
+        L.wounded ? ` · ще ${L.wounded} у зоні поранення` : '')));
+    } else if (L.direct) {
+      rows.push(row(`Скид ${L.no}`, el('span', {}, el('span', { class: 'v bad' }, 'пряме влучання без ураження'), ` — ${L.why}`)));
     } else {
+      const zone = L.eff === 'radius'
+        ? (L.best.d <= L.R.wound ? ` — у зоні поранення, ураження лише до ${fmt(L.R.kill)} м` : ` — поза зоною ураження ${fmt(L.R.kill)} м`)
+        : L.eff === 'direct' ? ' — по цій цілі потрібне пряме влучання' : ' — і пряме не допомогло б, див. «БЧ»';
       rows.push(row(`Скид ${L.no}`, el('span', {}, el('span', { class: 'v bad' }, `промах ${fmt(L.best.d)} м`),
-        ` до краю · ${where(L.best.dn, L.best.de, ['вище', 'нижче'])} від центру цілі`)));
+        ` до краю · ${where(L.best.dn, L.best.de, ['вище', 'нижче'])} від центру цілі${zone}`)));
     }
     if (L) {
       rows.push(row('Падав', `${fmt(L.T)} с · вітер зніс ${fmt(L.drift)} м${L.drift >= 0.05 ? ` (${where(L.dx, L.dy, ['вгору', 'вниз'])})` : ''}`));
       if (state.move) rows.push(row('Ціль', `за цей час пройшла ${fmt(state.move * L.T)} м — бери упередження по ходу руху`));
     }
+    if (round) {
+      const ld = loadById(state.load), icon = round.kind.icon, eff = effect(ld, icon);
+      const wh = warhead(ld).name.toLowerCase();
+      rows.push(row('БЧ', eff === 'radius' ? describe(ld)
+        : eff === 'direct' ? `${wh} · по цілі «${round.kind.name}» — лише пряме влучання` : `${wh} · ${whyNot(ld, icon)}`));
+    }
     if (state.hint && hint) {
       const d = Math.hypot(hint.x, hint.y);
-      rows.push(row('Підказка', d >= 0.05 ? `впаде ${where(hint.x, hint.y, ['вище', 'нижче'])} від прицілу — синє кільце` : 'впаде під приціл', 'fx'));
+      rows.push(row('Підказка', `${d >= 0.05 ? `впаде ${where(hint.x, hint.y, ['вище', 'нижче'])} від прицілу` : 'впаде під приціл'} — синє кільце${
+        effect(loadById(state.load), round.kind.icon) === 'radius' ? ' розміром із зону ураження' : ''}`, 'fx'));
     }
     out.replaceChildren(...rows);
   }
@@ -655,11 +707,24 @@ export function initSim({ loads, loadById }) {
         o.setAttribute('aria-expanded', String(o === b && open));
         $(o.dataset.panel).hidden = !(o === b && open);
       }
+      // Стрічку вирівнюємо, коли її видно: у прихованої немає розмірів
+      if (b.dataset.key === 'tgt' && open) tgtWheel.settle(tgtStrip.querySelector('[aria-checked="true"]'));
     });
   }
-  $('sim-tgt').append(el('div', { class: 'chips' }, KINDS.map((k) => el('button', {
-    type: 'button', 'data-v': k.id, onclick: () => { state.kind = k.id; changed({ fresh: true }); },
-  }, `${k.name} · ${fmt(k.size, 0)} м`))));
+  // Ціль — стрічкою, як у Shooter's Log: посередині в рамці, під стрічкою — що це і чим брати; вибір — тапом
+  const tgtStrip = el('div', { class: 'tgt-strip', role: 'radiogroup', 'aria-label': 'Ціль' }, KINDS.map((k) => {
+    const ico = el('span', { class: 'tgt-ico' });
+    ico.innerHTML = SYM(k.icon);
+    return el('button', {
+      type: 'button', class: 'tgt-opt', role: 'radio', 'data-v': k.id, onclick: () => { state.kind = k.id; changed({ fresh: true }); },
+    }, ico, el('span', {}, k.name));
+  }));
+  const tgtNote = el('p', { class: 'tgt-note' });
+  const tgtWheel = wheelStrip(tgtStrip, (b) => {
+    const k = KINDS.find((x) => x.id === b.dataset.v);
+    tgtNote.textContent = `${k.name}: ${k.what}, ${fmt(k.size, 0)} м · ${takes(k.icon)}`;
+  });
+  $('sim-tgt').append(tgtStrip, tgtNote);
   $('sim-move').append(el('div', { class: 'chips' }, MOVES.map((m) => el('button', {
     type: 'button', 'data-v': String(m.v), onclick: () => { state.move = m.v; changed(); },
   }, m.name))));
@@ -689,7 +754,13 @@ export function initSim({ loads, loadById }) {
     $('sim-tgt-v').textContent = k.name;
     $('sim-wind-v').textContent = state.wind ? `${fmt(state.wind, state.wind % 1 ? 1 : 0)} м/с` : 'штиль';
     $('sim-move-v').textContent = state.move ? (move().short || move().name) : 'стоїть';
-    for (const b of $('sim-tgt').querySelectorAll('button')) b.classList.toggle('on', b.dataset.v === state.kind);
+    $('sim-tgt-ico').innerHTML = SYM(k.icon);
+    let on = null;
+    for (const b of tgtStrip.querySelectorAll('.tgt-opt')) {
+      b.setAttribute('aria-checked', String(b.dataset.v === state.kind));
+      if (b.dataset.v === state.kind) on = b;
+    }
+    if (!$('sim-tgt').hidden) tgtWheel.settle(on);
     for (const b of $('sim-move').querySelectorAll('button')) b.classList.toggle('on', +b.dataset.v === state.move);
     tools.forEach((b) => b.classList.toggle('hot', (b.dataset.key === 'wind' && state.wind > 0) || (b.dataset.key === 'move' && state.move > 0)));
     wind.paint();

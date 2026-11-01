@@ -226,7 +226,8 @@ input[readonly] { color: var(--muted); background: transparent; }
 .wp-aim { stroke: var(--muted); stroke-width: .7; stroke-dasharray: 2 1.6; }
 .wp-aim-head { fill: var(--muted); }
 .wind-pick .wp-text { fill: var(--muted); font-size: 5px; }
-.wp-drone { fill: none; stroke: var(--text); stroke-width: 1.1; stroke-linecap: round; }
+.wp-drone { fill: none; stroke: var(--text); stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round; }
+.wp-drone .wp-nose { fill: var(--accent-2); stroke: none; }
 .wp-wind line { stroke: var(--accent-2); stroke-width: 1.6; stroke-linecap: round; }
 .wp-wind path { fill: var(--accent); }
 .wind-pick button { position: absolute; left: calc(50% + var(--x) * 46% - 17px); top: calc(50% + var(--y) * 46% - 17px);
@@ -313,21 +314,35 @@ input[readonly] { color: var(--muted); background: transparent; }
 .sim-help p { margin: 0; }
 .sim-legend { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .sim-legend li { display: grid; grid-template-columns: 34px 1fr; gap: 10px; align-items: start; line-height: 1.4; }
+/* Ціль — стрічка-колесо з Shooter's Log */
+.tgt-strip { position: relative; display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain;
+  mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent); scrollbar-width: none; margin: 0 -2px; padding: 2px 2px 4px; }
+.tgt-strip::-webkit-scrollbar { display: none; }
+.tgt-opt { flex: none; display: flex; align-items: center; gap: 6px; height: 44px; padding: 0 12px 0 6px; scroll-snap-align: center; white-space: nowrap;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--surface); cursor: pointer; font-size: 14px; }
+.tgt-opt.focus { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.tgt-opt[aria-checked="true"] { background: var(--accent-soft); font-weight: 650; }
+.tgt-ico { display: grid; place-items: center; }
+.tgt-sym { width: 34px; height: 30px; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.sim-tool .tgt-sym { width: 28px; height: 25px; }
+.tgt-note { margin: 6px 2px 0; min-height: 1.3em; font-size: 13px; color: var(--muted); }
 .lg-head { margin: 6px 0 0; font-size: 14px; color: var(--accent-2); }
 /* Знаки легенди — на кольорі землі з кадру, тими самими фарбами, що й на кадрі */
 .lg-sym { width: 34px; height: 30px; border-radius: 9px; background: #6d7746; fill: none; stroke-linecap: round; stroke-linejoin: round; }
-.lg-sym .s-hos { fill: rgb(255 128 128 / .88); stroke: #111; stroke-width: 1.3; }
-.lg-sym .s-in { stroke: #111; stroke-width: 1.3; }
-.lg-sym .s-txt { fill: #111; stroke: none; font: 700 10px system-ui, sans-serif; text-anchor: middle; }
-.lg-sym .s-foot { stroke: #fff; stroke-width: 1; stroke-dasharray: 1.5 1.5; }
-.lg-sym .s-sel { stroke: #ffd24a; stroke-width: 2; }
-.lg-sym .s-hit { stroke: #fff; stroke-width: 1.8; }
-.lg-sym .s-crater { fill: rgb(40 34 26 / .75); }
-.lg-sym .s-miss { stroke: #fff; stroke-width: 1.3; }
-.lg-sym .s-mark { stroke: #ff6b5a; stroke-width: 1.3; }
-.lg-sym .s-ret { stroke: #fff; stroke-width: 1.5; }
-.lg-sym .s-hint { stroke: #79aaf0; stroke-width: 1.3; stroke-dasharray: 2 1.5; }
-:root[data-theme="night"] .lg-sym { filter: grayscale(1) sepia(1) saturate(5) hue-rotate(-40deg) brightness(.42); }
+:is(.lg-sym, .tgt-sym) .s-hos { fill: rgb(255 128 128 / .88); stroke: #111; stroke-width: 1.3; }
+:is(.lg-sym, .tgt-sym) .s-in { stroke: #111; stroke-width: 1.3; }
+:is(.lg-sym, .tgt-sym) .s-txt { fill: #111; stroke: none; font: 700 10px system-ui, sans-serif; text-anchor: middle; }
+:is(.lg-sym, .tgt-sym) .s-foot { stroke: #fff; stroke-width: 1; stroke-dasharray: 1.5 1.5; }
+:is(.lg-sym, .tgt-sym) .s-sel { stroke: #ffd24a; stroke-width: 2; }
+:is(.lg-sym, .tgt-sym) .s-hit { stroke: #fff; stroke-width: 1.8; }
+:is(.lg-sym, .tgt-sym) .s-crater { fill: rgb(40 34 26 / .75); }
+:is(.lg-sym, .tgt-sym) .s-miss { stroke: #fff; stroke-width: 1.3; }
+:is(.lg-sym, .tgt-sym) .s-mark { stroke: #ff6b5a; stroke-width: 1.3; }
+:is(.lg-sym, .tgt-sym) .s-ret { stroke: #fff; stroke-width: 1.5; }
+:is(.lg-sym, .tgt-sym) .s-kill { stroke: rgb(255 90 74 / .95); stroke-width: 1.3; stroke-dasharray: 2.5 2; }
+:is(.lg-sym, .tgt-sym) .s-wound { stroke: rgb(255 179 71 / .85); stroke-width: 1.3; stroke-dasharray: 2.5 2; }
+:is(.lg-sym, .tgt-sym) .s-hint { stroke: #79aaf0; stroke-width: 1.3; stroke-dasharray: 2 1.5; }
+:root[data-theme="night"] :is(.lg-sym, .tgt-sym) { filter: grayscale(1) sepia(1) saturate(5) hue-rotate(-40deg) brightness(.42); }
 .lg-ico { display: grid; place-items: center; width: 34px; height: 30px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); font-size: 15px; }
 
 /* Підказка, вантаж, нова ситуація — один рядок */
@@ -342,7 +357,7 @@ input[readonly] { color: var(--muted); background: transparent; }
 .sim-tool { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 7px; align-items: center; justify-items: start;
   min-width: 0; padding: 6px 13px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); text-align: left; cursor: pointer;
   touch-action: pan-y; user-select: none; -webkit-user-select: none; }
-.sim-tool > svg { grid-row: span 2; }
+.sim-tool > svg, .sim-tool > .tgt-ico { grid-row: span 2; }
 .sim-tool-t { font-size: 11px; line-height: 1.2; color: var(--muted); }
 .sim-tool-v { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 12px var(--mono); letter-spacing: -0.04em; }
 .sim-tool.swipe::before, .sim-tool.swipe::after { position: absolute; top: 50%; transform: translateY(-55%); font: 600 15px system-ui, sans-serif;
@@ -360,7 +375,7 @@ input[readonly] { color: var(--muted); background: transparent; }
 .sim-more[aria-expanded="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-2); }
 .sim-more[aria-expanded="true"] svg { transform: rotate(180deg); }
 #sim-renew p { margin: 8px 0 0; }
-.sim-panel { padding: 10px; border: 1px solid var(--accent); border-radius: 12px; background: var(--surface-2); }
+.sim-panel { min-width: 0; padding: 10px; border: 1px solid var(--accent); border-radius: 12px; background: var(--surface-2); }
 .sim-panel[hidden] { display: none; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chips button { min-height: 38px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); cursor: pointer; font-size: 14px; }

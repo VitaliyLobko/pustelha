@@ -15,6 +15,7 @@ const ASSETS = [
   './js/sim.js',
   './js/settings.js',
   './js/theme-boot.js',
+  './js/warhead.js',
   './icons/icon.svg',
   './icons/icon-192.png',
   './icons/icon-512.png',

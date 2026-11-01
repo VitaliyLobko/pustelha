@@ -10,11 +10,20 @@ const WIND_SIGNS = [
   [Infinity, 'гойдаються невеликі дерева, гілки шумлять'],
 ];
 const WIND_QUICK = [[0, 'штиль'], [2, 'дим'], [4, 'листя'], [6, 'пил'], [8, 'дерева']];
-// Ручка сили: від R0 (ледь дме) до R0 + RS (край шкали) в одиницях циферблата
-const R0 = 8;
-const RS = 29;
+// Ручка сили: від R0 (ледь дме) до R0 + RS (край шкали) в одиницях циферблата; R0 — одразу за значком дрона
+const R0 = 11;
+const RS = 26;
 // Точка на циферблаті (viewBox 100): кут від 12-ї години за стрілкою, r — відстань від центру
 const dialPt = (deg, r) => [50 + Math.sin((deg * Math.PI) / 180) * r, 50 - Math.cos((deg * Math.PI) / 180) * r];
+
+// «Вампір» згори: шість променів під ±30°, ±90°, ±150° від носа (передні два обабіч носа), корпус-шестикутник, кола гвинтів
+const ARMS = [30, 90, 150, 210, 270, 330];
+const p2 = (deg, r) => dialPt(deg, r).map((v) => v.toFixed(2)).join(' ');
+const DRONE = `<g class="wp-drone">
+  <path d="${ARMS.map((a) => `M${p2(a, 2.7)}L${p2(a, 6.2)}`).join('')}"/>
+  <path d="${ARMS.map((a, i) => `${i ? 'L' : 'M'}${p2(a, 2.8)}`).join('')}Z"/>
+  ${ARMS.map((a) => { const [x, y] = dialPt(a, 7.6); return `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="2.3"/>`; }).join('')}
+  <path class="wp-nose" d="M50 45.4 51.35 47.4H48.65Z"/></g>`;
 
 /**
  * Тап по годині — звідки дме, тягни від центру — сила (край = max), кнопки швидкого вибору з ознаками.
@@ -52,10 +61,10 @@ export function windPicker({ get, set, max = 10 }) {
   // Стрілку вітру намальовано для 12-ї години й повернуто на вибрану; починається від ручки сили
   face.innerHTML = `<svg viewBox="0 0 100 100">
     <circle class="wp-ring" cx="50" cy="50" r="38"/>${scale}
-    <line class="wp-aim" x1="50" y1="44" x2="50" y2="19"/><path class="wp-aim-head" d="M50 13.5 L53 19 L47 19 Z"/>
+    <line class="wp-aim" x1="50" y1="40" x2="50" y2="19"/><path class="wp-aim-head" d="M50 13.5 L53 19 L47 19 Z"/>
     <text class="wp-text" x="53.5" y="25">ніс</text>
-    <g class="wp-wind"><line x1="50" y1="16" x2="50" y2="41"/><path d="M50 44 L52.8 38.8 L47.2 38.8 Z"/></g>
-    <g class="wp-drone"><path d="M46.2 46.2 L53.8 53.8 M53.8 46.2 L46.2 53.8"/><circle cx="45.4" cy="45.4" r="2.3"/><circle cx="54.6" cy="45.4" r="2.3"/><circle cx="45.4" cy="54.6" r="2.3"/><circle cx="54.6" cy="54.6" r="2.3"/></g>
+    <g class="wp-wind"><line x1="50" y1="16" x2="50" y2="38"/><path d="M50 41 L52.8 35.8 L47.2 35.8 Z"/></g>
+    ${DRONE}
     <circle class="wp-knob" r="6"/><text class="wp-knob-text" text-anchor="middle"></text></svg>`;
   const wind = face.querySelector('.wp-wind');
   const shaft = wind.querySelector('line');
@@ -69,7 +78,7 @@ export function windPicker({ get, set, max = 10 }) {
     const dx = ((e.clientX - box.left) / box.width) * 100 - 50;
     const dy = ((e.clientY - box.top) / box.height) * 100 - 50;
     const r = Math.hypot(dx, dy);
-    const v = r < 6 ? 0 : Math.min(max, Math.max(1, Math.round(((r - R0) / RS) * max)));
+    const v = r < 9 ? 0 : Math.min(max, Math.max(1, Math.round(((r - R0) / RS) * max)));
     const n = Math.round(((Math.atan2(dx, -dy) * 180) / Math.PI + 360) / 30) % 12 || 12;
     if (v > 0 && n !== get().clock) set({ clock: n });
     setForce(v);

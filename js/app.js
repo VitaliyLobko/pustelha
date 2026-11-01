@@ -3,15 +3,16 @@ import { $, el, fmt, num, read, write, arrowHead, clockWord, where } from './ui.
 import { windPicker } from './wind-pick.js';
 import { initSim } from './sim.js';
 import { renderSettings } from './settings.js';
+import { WARHEADS, warhead, charge, radii, describe } from './warhead.js';
 
 const KEY = 'pustelha:calc';
 const LOADS_KEY = 'pustelha:loads';
 
-// Умовні вантажі для прототипу — не реальні вироби
+// Умовні вантажі для прототипу — не реальні вироби; по одному на тип БЧ
 const PRESETS = [
-  { id: 'c05', name: 'Умовний 0,5 кг', mass: 0.5, diameter: 50, cd: 0.6 },
-  { id: 'c1', name: 'Умовний 1 кг', mass: 1, diameter: 70, cd: 0.5 },
-  { id: 'c2', name: 'Умовний 2 кг', mass: 2, diameter: 100, cd: 0.45 },
+  { id: 'c05', name: 'Умовний осколковий 0,5 кг', mass: 0.5, diameter: 50, cd: 0.6, type: 'frag', ex: 0.1 },
+  { id: 'c1', name: 'Умовний фугасний 1 кг', mass: 1, diameter: 70, cd: 0.5, type: 'he', ex: 0.5 },
+  { id: 'c2', name: 'Умовний кумулятивний 2 кг', mass: 2, diameter: 100, cd: 0.45, type: 'heat', ex: 0.6 },
 ];
 const DEFAULTS = { height: 100, speed: 0, delay: 0, wind: 4, clock: 3, profile: true, tempC: 15, elevation: 150, load: 'c1' };
 const TABLE_HEIGHTS = [25, 50, 75, 100, 150, 200, 250, 300];
@@ -76,20 +77,36 @@ function paintLoads() {
     input.readOnly = preset;
     input.classList.remove('invalid');
   }
+  $('l-type').value = warhead(load).id;
+  $('l-type').disabled = preset;
+  $('l-ex').value = charge(load);
+  $('l-ex').readOnly = preset;
+  $('l-ex').classList.remove('invalid');
+  paintWarhead(load);
   $('l-name-row').hidden = preset;
   $('l-name').value = load.name;
   const note = $('load-note');
   note.className = preset ? 'note warn' : 'note';
   note.textContent = preset
-    ? 'Умовні цифри для прикладу — не реальний виріб. Для свого вантажу натисни «Зробити свій» і впиши масу, діаметр корпусу та Cd.'
+    ? 'Умовні цифри для прикладу — не реальний виріб. Для свого вантажу натисни «Зробити свій» і впиши масу, діаметр корпусу, Cd, тип БЧ і масу ВР.'
     : 'Cd — коефіцієнт опору: що більший, то сильніше гальмує повітря і зносить вітер. Орієнтири з підручника: куля ≈ 0,47, циліндр торцем ≈ 0,8, кубик ≈ 1,05.';
   $('load-actions').replaceChildren(preset
     ? el('button', { type: 'button', class: 'btn', onclick: () => addLoad({ ...load, name: `${load.name} (свій)` }) }, 'Зробити свій')
     : el('button', { type: 'button', class: 'btn danger', onclick: removeLoad }, 'Видалити'));
 }
 
+function paintWarhead(load) {
+  const r = radii(load);
+  $('wh-note').textContent = warhead(load).id === 'heat'
+    ? `Кумулятивна пробиває броню лише прямим влучанням; по живій силі — як невеликий фугас: ураження ${fmt(r.kill)} м, поранення ${fmt(r.wound)} м.`
+    : `Від краю цілі: ураження ${fmt(r.kill)} м, поранення ${fmt(r.wound)} м. Радіус росте як ∛ маси ВР — удвічі більший заряд дає лише +26 %.`;
+}
+
 function addLoad(from) {
-  const load = { id: `u${Date.now().toString(36)}`, name: from.name, mass: from.mass, diameter: from.diameter, cd: from.cd };
+  const load = {
+    id: `u${Date.now().toString(36)}`, name: from.name, mass: from.mass, diameter: from.diameter, cd: from.cd,
+    type: warhead(from).id, ex: charge(from),
+  };
   custom.push(load);
   state.load = load.id;
   saveLoads();
@@ -127,6 +144,28 @@ function bindLoads() {
       changed();
     });
   }
+  $('l-type').replaceChildren(...WARHEADS.map((w) => el('option', { value: w.id }, w.name)));
+  $('l-type').addEventListener('change', (e) => {
+    const load = currentLoad();
+    if (isPreset(load)) return;
+    load.type = e.target.value;
+    saveLoads();
+    paintWarhead(load);
+    changed();
+  });
+  $('l-ex').addEventListener('input', (e) => {
+    const load = currentLoad();
+    if (isPreset(load)) return;
+    const v = num(e.target.value);
+    // ВР не важча за весь вантаж
+    const ok = Number.isFinite(v) && v > 0 && v <= load.mass;
+    e.target.classList.toggle('invalid', !ok);
+    if (!ok) return;
+    load.ex = v;
+    saveLoads();
+    paintWarhead(load);
+    changed();
+  });
   $('l-name').addEventListener('input', (e) => {
     const load = currentLoad();
     if (isPreset(load)) return;
@@ -203,6 +242,7 @@ function render() {
     : hover
       ? `Щоб влучити: зависни так, щоб ціль була ${where(r.x, r.y)} від точки під дроном — дрон стоїть проти вітру від цілі.`
       : `Щоб влучити: у момент скиду ціль має бути ${where(r.x, r.y)} від точки під дроном.`));
+  lines.push(el('li', {}, `Бойова частина: ${describe(load)} від краю цілі.`));
   lines.push(el('li', { class: 'small muted' }, 'Точка під дроном = центр кадру, лише коли камера дивиться строго вниз (−90°).'));
 
   out.replaceChildren(
