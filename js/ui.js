@@ -1,0 +1,72 @@
+// Спільне для екранів: побудова DOM, числа українською, збереження на пристрої.
+
+const SVG = 'http://www.w3.org/2000/svg';
+
+export const $ = (id) => document.getElementById(id);
+
+/** Елемент з атрибутами й дітьми; 'svg:тег' — у просторі імен SVG, on… — слухачі. */
+export function el(tag, attrs = {}, ...children) {
+  const node = tag.startsWith('svg:') ? document.createElementNS(SVG, tag.slice(4)) : document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
+    else node.setAttribute(k, v === true ? '' : v);
+  }
+  node.append(...children.flat().filter((c) => c != null && c !== false));
+  return node;
+}
+
+const formats = new Map();
+/** Число з комою й фіксованою кількістю знаків; «−0,0» не показуємо. */
+export function fmt(n, digits = 1) {
+  if (!formats.has(digits)) formats.set(digits, new Intl.NumberFormat('uk-UA', { minimumFractionDigits: digits, maximumFractionDigits: digits }));
+  return formats.get(digits).format(Math.abs(n) < 0.5 * 10 ** -digits ? 0 : n);
+}
+
+/** Число з поля: кома теж роздільник; не число — NaN. */
+export const num = (v) => {
+  const n = parseFloat(String(v).replace(',', '.'));
+  return Number.isFinite(n) ? n : NaN;
+};
+
+/** Наконечник стрілки в (x, y), напрям (dx, dy) — одиничний вектор, s — довжина. */
+export const arrowHead = (x, y, dx, dy, s) =>
+  `M${x},${y} L${x - dx * s - dy * s * .6},${y - dy * s + dx * s * .6} L${x - dx * s + dy * s * .6},${y - dy * s - dx * s * .6} Z`;
+
+export const read = (key, fallback) => {
+  try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
+};
+export const write = (key, value) => {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* приватний режим — працюємо без збереження */ }
+};
+
+export const vibrate = (ms) => navigator.vibrate?.(ms);
+
+let toastT = 0;
+/** Коротке повідомлення внизу екрана на 2,5 с. */
+export function toast(text) {
+  let box = document.getElementById('toast');
+  if (!box) {
+    box = el('div', { id: 'toast', class: 'toast', role: 'status', 'aria-live': 'polite' });
+    document.body.append(box);
+  }
+  box.textContent = text;
+  box.hidden = false;
+  clearTimeout(toastT);
+  toastT = setTimeout(() => { box.hidden = true; }, 2500);
+}
+
+/** Звідки дме за годинником від носа дрона — словами. */
+const CLOCK_WORDS = {
+  12: 'в лоб', 1: 'спереду-справа', 2: 'спереду-справа', 3: 'справа', 4: 'ззаду-справа', 5: 'ззаду-справа',
+  6: 'в спину', 7: 'ззаду-зліва', 8: 'ззаду-зліва', 9: 'зліва', 10: 'спереду-зліва', 11: 'спереду-зліва',
+};
+export const clockWord = (h) => `з ${h} год — ${CLOCK_WORDS[h]}`;
+
+/** «1,2 м попереду і 0,4 м ліворуч» — у системі дрона (x — вперед, y — праворуч). */
+export function where(x, y, [fwd, back] = ['попереду', 'позаду']) {
+  const parts = [];
+  if (Math.abs(x) >= 0.05) parts.push(`${fmt(Math.abs(x))} м ${x > 0 ? fwd : back}`);
+  if (Math.abs(y) >= 0.05) parts.push(`${fmt(Math.abs(y))} м ${y > 0 ? 'праворуч' : 'ліворуч'}`);
+  return parts.join(' і ');
+}

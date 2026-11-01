@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0c111a">
+  <meta name="description" content="Розрахунок скиду з дрона: висота, вітер, вантаж — точка падіння і поправка">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'">
+  <title>Пустельга</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/app.css">
+  <script src="js/theme-boot.js"></script>
+  <script src="version.js"></script>
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Пустельга</h1>
+      <div class="muted small">Тренажер скиду · прототип <span id="ver"></span></div>
+    </div>
+    <button type="button" class="gear" id="gear" aria-pressed="false" title="Налаштування" aria-label="Налаштування"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+  </header>
+
+  <div id="update" class="update" hidden>
+    <span>Доступна нова версія</span>
+    <button type="button" id="update-btn">Оновити</button>
+  </div>
+
+  <main class="view">
+    <div class="seg tabs" role="tablist">
+      <button type="button" role="tab" data-tab="sim">Тренажер</button>
+      <button type="button" role="tab" data-tab="calc">Розрахунок</button>
+    </div>
+
+    <section class="pane" id="pane-sim" hidden>
+      <div class="sim">
+        <div class="sim-frame" id="sim-frame">
+          <canvas id="sim-cv" aria-label="Вид з камери дрона вниз: тягни приціл пальцем на ціль"></canvas>
+          <div class="sim-osd-frame" aria-hidden="true"></div>
+          <button type="button" class="hint-btn" id="sim-i" aria-expanded="false" aria-controls="sim-help" aria-label="Як користуватись тренажером">i</button>
+          <div class="sim-wind-osd" id="sim-wind-osd" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><g id="sim-wind-arrow"><path d="M12 20V5M7 10l5-5 5 5"/></g></svg>
+            <b id="sim-wind-osd-v"></b>
+          </div>
+          <div class="sim-corner">
+            <button type="button" class="sim-zoom" id="sim-fig" title="Ціль: наступна" aria-label="Ціль: наступна"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1"/><path d="M3 9V3h6M15 3h6v6M21 15v6h-6M9 21H3v-6"/></svg><span id="sim-fig-v">1/5</span></button>
+            <button type="button" class="sim-zoom" id="sim-z-btn" data-pop="pop-z" aria-expanded="false" title="Кратність камери" aria-label="Кратність камери"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.3 15.3 21 21"/></svg><span id="sim-zoom-v"></span></button>
+          </div>
+          <button type="button" class="sim-ret" id="sim-ret" aria-label="Сітка"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.5"/><path d="M12 2v6M12 16v6M2 12h6M16 12h6"/></svg></button>
+          <div class="sim-msg" id="sim-msg" hidden></div>
+          <button type="button" class="sim-badge bl" id="sim-h-btn" data-pop="pop-h" aria-expanded="false" title="Висота"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M8.5 6.5 12 3l3.5 3.5M8.5 17.5 12 21l3.5-3.5"/></svg><b id="sim-h-v"></b></button>
+          <span class="sim-badge br" title="Влучання / скиди"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="1"/><path d="M9 9l6 6M15 9l-6 6"/></svg><b id="sim-score-v">0/0</b></span>
+          <label class="sim-pop" id="pop-h" for="sim-h" hidden>Висота над ціллю<input id="sim-h" type="range" min="25" max="300" step="5"><span class="ticks" aria-hidden="true"><span>25</span><span>100</span><span>200</span><span>300</span></span></label>
+          <label class="sim-pop top" id="pop-z" for="sim-z" hidden>Кратність камери, 1–8×<input id="sim-z" type="range" min="1" max="8" step="1"><span class="ticks" aria-hidden="true"><span>1×</span><span>2×</span><span>4×</span><span>6×</span><span>8×</span></span></label>
+        </div>
+
+        <div class="sim-help" id="sim-help" hidden>
+          <p>Вид з камери дрона строго вниз, ніс дрона — угорі кадру. Приціл — точка під дроном. Дрон висить на місці: вантаж летить без швидкості дрона, його зносить вітер.</p>
+          <ul class="sim-legend">
+            <li><span class="lg-ico lg-txt">☝</span><span><b>Приціл</b> — постав палець на приціл і тягни: він їде за пальцем, палець його не закриває.</span></li>
+            <li><span class="lg-ico lg-txt">✥</span><span><b>Свайп</b> будь-де поза прицілом: вгору-вниз — висота, вліво-вправо — кратність.</span></li>
+            <li><span class="lg-ico lg-txt">↕</span><span><b>Висота</b> — плашка внизу ліворуч, тап — повзунок. Нова висота — нова ситуація.</span></li>
+            <li><span class="lg-ico lg-txt">⛶</span><span><b>Ціль</b> — угорі праворуч «1/5»: тап — наступна ціль. Вибрана підсвічена жовтим, промах рахується до неї.</span></li>
+            <li><span class="lg-ico lg-txt">🔍</span><span><b>Кратність</b> — поруч із ціллю: наближення камери 1–8×, тап — повзунок. Цілі лишаються на місцях.</span></li>
+            <li><span class="lg-ico lg-txt">⊕</span><span><b>Сітка</b> — кругла кнопка під ними: хрест, хрест з колом, метри на землі, точка.</span></li>
+            <li><span class="lg-ico lg-txt">◫</span><span><b>Рахунок</b> — внизу праворуч: влучання / скиди в цій ситуації.</span></li>
+            <li><span class="lg-ico lg-txt">👁</span><span><b>Підказка</b> — синє кільце: куди впаде вантаж, скинутий зараз.</span></li>
+            <li><span class="lg-ico lg-txt">⟳</span><span><b>Нова ситуація</b> — цілі на нових місцях; ▾ поруч — що міняти ще: статично, вітер, рух або все разом.</span></li>
+            <li><span class="lg-ico lg-txt">‹›</span><span><b>Ціль, Вітер, Рух</b> — тап відкриває вибір, свайп по кнопці — наступне значення.</span></li>
+          </ul>
+          <p class="small muted">Вантаж падає в реальному часі: по рухомій цілі бери упередження. Вантажі поки умовні — свої задаються у «Розрахунку».</p>
+        </div>
+
+        <div class="sim-line">
+          <button type="button" class="sim-icon" id="sim-hint" aria-pressed="false" title="Підказка: куди впаде" aria-label="Підказка: куди впаде"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          <select id="sim-load" class="sim-load" aria-label="Вантаж"></select>
+          <span class="sim-split">
+            <button type="button" class="sim-icon" id="sim-new" title="Нова ситуація" aria-label="Нова ситуація"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg></button>
+            <button type="button" class="sim-icon sim-more" id="sim-new-mode" aria-expanded="false" aria-controls="sim-renew"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg></button>
+          </span>
+        </div>
+        <div class="sim-panel" id="sim-renew" hidden></div>
+        <div class="sim-tools" role="group">
+          <button type="button" class="sim-tool swipe" data-key="tgt" data-panel="sim-tgt" aria-expanded="false" title="Ціль"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="1.5"/></svg><span class="sim-tool-t">Ціль</span><span class="sim-tool-v" id="sim-tgt-v"></span></button>
+          <button type="button" class="sim-tool swipe" data-key="wind" data-panel="sim-wind" aria-expanded="false" title="Вітер"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h10.5a3 3 0 1 0-3-3M3 12h15.5a3 3 0 1 1-3 3M3 16h7"/></svg><span class="sim-tool-t">Вітер</span><span class="sim-tool-v" id="sim-wind-v"></span></button>
+          <button type="button" class="sim-tool swipe" data-key="move" data-panel="sim-move" aria-expanded="false" title="Рух"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="14.5" cy="4.5" r="2"/><path d="M8 21l3-5.5 3 2.5v4.5M11 15.5l1.2-5.5 3.3 3h3.5M12.2 10l-4.2.8-2 3.2"/></svg><span class="sim-tool-t">Рух</span><span class="sim-tool-v" id="sim-move-v"></span></button>
+        </div>
+        <div class="sim-panel" id="sim-tgt" hidden></div>
+        <div class="sim-panel" id="sim-wind" hidden></div>
+        <div class="sim-panel" id="sim-move" hidden></div>
+        <button type="button" class="drop-btn" id="sim-drop">Скид</button>
+        <div class="readout" id="sim-out" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <section class="pane" id="pane-set" hidden></section>
+
+    <section class="pane" id="pane-calc" hidden>
+    <fieldset class="box">
+      <legend>Скид</legend>
+      <div class="field" data-key="height" data-min="10" data-max="300" data-step="5">
+        <label for="f-height">Висота над ціллю, м</label>
+        <div class="pair"><input type="range" id="r-height"><input type="number" id="f-height" inputmode="decimal"></div>
+      </div>
+      <div class="field" data-key="speed" data-min="0" data-max="25" data-step="0.5">
+        <label for="f-speed">Швидкість дрона, м/с <span class="hint" id="speed-hint"></span></label>
+        <div class="pair"><input type="range" id="r-speed"><input type="number" id="f-speed" inputmode="decimal"></div>
+      </div>
+      <details class="more">
+        <summary>Додатково</summary>
+        <div class="field" data-key="delay" data-min="0" data-max="1" data-step="0.05">
+          <label for="f-delay">Затримка скиду, с <span class="hint">від натискання до відпускання</span></label>
+          <div class="pair"><input type="range" id="r-delay"><input type="number" id="f-delay" inputmode="decimal"></div>
+        </div>
+      </details>
+    </fieldset>
+
+    <fieldset class="box">
+      <legend>Вітер</legend>
+      <div class="calc-wind" id="calc-wind"></div>
+      <div class="label">Біля землі</div>
+      <div class="seg" id="profile">
+        <button type="button" data-v="1">Слабшає до землі</button>
+        <button type="button" data-v="0">Такий самий</button>
+      </div>
+    </fieldset>
+
+    <fieldset class="box">
+      <legend>Вантаж</legend>
+      <select id="load"></select>
+      <div class="load-grid">
+        <label class="field"><span>Маса, кг</span><input type="number" id="l-mass" inputmode="decimal" step="0.05" min="0"></label>
+        <label class="field"><span>Діаметр, мм</span><input type="number" id="l-diameter" inputmode="decimal" step="1" min="0"></label>
+        <label class="field"><span>Cd</span><input type="number" id="l-cd" inputmode="decimal" step="0.05" min="0"></label>
+      </div>
+      <label class="field" id="l-name-row"><span>Назва</span><input type="text" id="l-name" maxlength="40"></label>
+      <p class="note" id="load-note"></p>
+      <div class="actions" id="load-actions"></div>
+    </fieldset>
+
+    <details class="box fold" id="air-box">
+      <summary>Повітря <span class="muted small" id="air-sum"></span></summary>
+      <div class="load-grid two">
+        <label class="field"><span>Температура, °C</span><input type="number" id="f-tempC" inputmode="decimal" step="1"></label>
+        <label class="field"><span>Місцевість над морем, м</span><input type="number" id="f-elevation" inputmode="decimal" step="10"></label>
+      </div>
+    </details>
+
+    <section class="result" id="result" aria-live="polite"></section>
+    </section>
+  </main>
+</body>
+</html>
