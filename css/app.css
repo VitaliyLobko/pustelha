@@ -124,6 +124,8 @@ button, input, select { font: inherit; color: inherit; }
 .set-inner { min-height: 0; overflow: hidden; }
 .set-pane { display: grid; gap: 8px; padding: 0 8px 12px 54px; }
 .set-pane p { margin: 0; }
+/* Пояснення — текст на всю ширину, без відступу під іконку */
+.how .set-pane { gap: 10px; padding-left: 12px; line-height: 1.45; }
 .about { padding: 6px 8px 10px; }
 .about h3 { margin: 0 0 4px; font-size: 17px; }
 .about p { margin: 0 0 6px; }
@@ -280,6 +282,9 @@ input[readonly] { color: var(--muted); background: transparent; }
   border-radius: calc(var(--ov) / 2); font: 650 13px var(--mono); }
 .sim-wind-osd[hidden] { display: none; }
 .sim-wind-osd svg { width: 20px; height: 20px; fill: none; stroke: #79aaf0; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.sim-wind-osd.gust { box-shadow: inset 0 0 0 1.5px #ffb347; }
+.sim-wind-osd.gust b { color: #ffb347; }
+.sim-wind-osd.lull b { color: #9fb3c8; }
 .sim-frame > .sim-corner { right: var(--ov-gap); top: var(--ov-gap); display: flex; border-radius: calc(var(--ov) / 2); overflow: hidden; }
 /* «Ціль n/5» і зум — одна плашка з розділювачем, як «Боєць 1/5 | лупа» в Shooter's Log */
 .sim-zoom { display: flex; align-items: center; gap: 4px; height: 100%; padding: 0 11px; border: 0; background: none; color: inherit;
@@ -356,7 +361,7 @@ input[readonly] { color: var(--muted); background: transparent; }
 .sim-tools { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; }
 .sim-tool { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 7px; align-items: center; justify-items: start;
   min-width: 0; padding: 6px 13px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); text-align: left; cursor: pointer;
-  touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+  touch-action: pan-y; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .sim-tool > svg, .sim-tool > .tgt-ico { grid-row: span 2; }
 .sim-tool-t { font-size: 11px; line-height: 1.2; color: var(--muted); }
 .sim-tool-v { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 12px var(--mono); letter-spacing: -0.04em; }
@@ -405,6 +410,18 @@ input[readonly] { color: var(--muted); background: transparent; }
 .stat-sub { margin-top: 2px; font-size: 12px; color: var(--muted); }
 .stat.hit { border-color: color-mix(in srgb, var(--c-hit) 45%, var(--line)); background: color-mix(in srgb, var(--c-hit) 8%, var(--surface)); }
 
+.stat.wide { grid-column: 1 / -1; }
+.stat-sep { color: var(--muted); font-weight: 600; }
+/* Розкид від поривів на схемі: точки скидів і еліпси 50 % / 90 % */
+.plan .sc-pt { fill: var(--c-hit); opacity: .28; }
+.plan .sc-50 { fill: color-mix(in srgb, var(--c-hit) 14%, transparent); stroke: var(--c-hit); stroke-width: 1.2; }
+.plan .sc-90 { fill: none; stroke: var(--c-hit); stroke-width: 1; stroke-dasharray: 4 3; opacity: .8; }
+/* Прогноз: поле координат з кнопкою, таблиця по висотах */
+.fc-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-bottom: 4px; }
+.fc-row .btn { min-height: 44px; }
+.fc-table { margin-top: 8px; }
+#w-terrain { margin-bottom: 2px; }
+#w-sum { color: var(--text); }
 .plan { display: block; width: 100%; max-width: 420px; margin: 0 auto; aspect-ratio: 1; }
 .plan .ring { fill: none; stroke: var(--line); }
 .plan .ring-label { fill: var(--muted); font-size: 9px; }

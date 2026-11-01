@@ -1,4 +1,6 @@
-import { solve, simulate, windVector } from './ballistics.js';
+import { solve, simulate, windVector, meanWind, levelWind, scatter, gustStats } from './ballistics.js';
+import { TERRAINS, GUSTS, REFS, z0Of, windSpec, clockOf } from './wind.js';
+import { LEVELS, parseCoords, coarse, fetchForecast, loadFc, saveFc, fcAge } from './forecast.js';
 import { $, el, fmt, num, read, write, arrowHead, clockWord, where } from './ui.js';
 import { windPicker } from './wind-pick.js';
 import { initSim } from './sim.js';
@@ -14,7 +16,10 @@ const PRESETS = [
   { id: 'c1', name: 'Умовний фугасний 1 кг', mass: 1, diameter: 70, cd: 0.5, type: 'he', ex: 0.5 },
   { id: 'c2', name: 'Умовний кумулятивний 2 кг', mass: 2, diameter: 100, cd: 0.45, type: 'heat', ex: 0.6 },
 ];
-const DEFAULTS = { height: 100, speed: 0, delay: 0, wind: 4, clock: 3, profile: true, tempC: 15, elevation: 150, load: 'c1' };
+const DEFAULTS = {
+  height: 100, speed: 0, delay: 0, wind: 4, clock: 3, tempC: 15, elevation: 150, load: 'c1',
+  src: 'hand', ref: 'drone', terrain: 'open', gusts: 'mid', heading: 0, meas: 0, measAt: 'drone', pos: '',
+};
 const TABLE_HEIGHTS = [25, 50, 75, 100, 150, 200, 250, 300];
 
 const state = { ...DEFAULTS, ...read(KEY, {}) };
@@ -51,10 +56,76 @@ function bindPairs() {
   }
 }
 
-function bindProfile() {
-  for (const b of $('profile').querySelectorAll('button')) {
-    b.addEventListener('click', () => { state.profile = b.dataset.v === '1'; changed(); });
+/* --- вітер: вручну чи з прогнозу, місцевість, пориви --- */
+let fc = loadFc();
+const SEGS = [['w-src', 'src', null], ['w-ref', 'ref', REFS], ['w-meas-at', 'measAt', REFS], ['w-terrain', 'terrain', TERRAINS], ['w-gust', 'gusts', GUSTS]];
+function bindWind() {
+  for (const [id, key, list] of SEGS) {
+    if (list) $(id).replaceChildren(...list.map(([v, label]) => el('button', { type: 'button', 'data-v': v }, label)));
+    for (const b of $(id).querySelectorAll('button')) b.addEventListener('click', () => { state[key] = b.dataset.v; changed(); });
   }
+  for (const [k, max] of [['heading', 359], ['meas', 40]]) {
+    const input = $(`f-${k}`);
+    input.value = state[k] || '';
+    input.addEventListener('input', () => {
+      const v = input.value.trim() === '' ? 0 : num(input.value);
+      const ok = Number.isFinite(v) && v >= 0 && v <= max;
+      input.classList.toggle('invalid', !ok);
+      if (!ok) return;
+      state[k] = v;
+      changed();
+    });
+  }
+  const pos = $('fc-pos');
+  pos.value = state.pos;
+  pos.addEventListener('change', () => {
+    // Зберігаємо лише огрублене — точних координат на пристрої не лишається
+    const p = parseCoords(pos.value);
+    if (p) { const c = coarse(p); state.pos = pos.value = `${c.lat}, ${c.lon}`; save(); }
+  });
+  $('fc-get').addEventListener('click', getForecast);
+}
+
+async function getForecast() {
+  const p = parseCoords($('fc-pos').value);
+  if (!p) {
+    paintFc('Не бачу координат. Потрібні цифри на кшталт «48.51, 37.98» або посилання з Google Maps. Коротке посилання maps.app.goo.gl не підходить — скопіюй самі цифри.', 'warn');
+    return;
+  }
+  const c = coarse(p);
+  state.pos = $('fc-pos').value = `${c.lat}, ${c.lon}`;
+  save();
+  const btn = $('fc-get');
+  btn.disabled = true;
+  paintFc('Питаю прогноз…');
+  try {
+    fc = await fetchForecast(c);
+    saveFc(fc);
+    state.src = 'fc';
+    changed();
+  } catch (err) {
+    paintFc(navigator.onLine ? `Сервер прогнозу не відповів (${err.message}). Спробуй ще раз.` : 'Немає мережі — прогноз узяти ніде.', 'warn');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/** Таблиця прогнозу по висотах або повідомлення. */
+function paintFc(msg, cls = '') {
+  const out = $('fc-out');
+  if (msg) { out.replaceChildren(el('p', { class: `note ${cls}` }, msg)); return; }
+  if (!fc) { out.replaceChildren(); return; }
+  const age = fcAge(fc);
+  const z0 = z0Of(state.terrain);
+  const H = state.height;
+  const rows = [...fc.levels.map((l) => [l.z, l.speed, l.dir]), [H, levelWind(fc.levels, H, z0).speed, levelWind(fc.levels, H, z0).dir]]
+    .sort((a, b) => a[0] - b[0]);
+  out.replaceChildren(
+    el('p', { class: `note${age.stale ? ' warn' : ''}` }, `Прогноз на ${fc.time.slice(11, 16)}, отримано ${age.text}${age.stale ? ' — застарів, онови' : ''} · пориви біля землі до ${fmt(fc.gust10)} м/с · ${fmt(fc.tempC, 0)} °C, ${fmt(fc.pressure, 0)} гПа`),
+    el('table', { class: 'table fc-table' },
+      el('thead', {}, el('tr', {}, el('th', {}, 'Висота'), el('th', {}, 'Вітер, м/с'), el('th', {}, 'Звідки'), el('th', {}, 'Від носа'))),
+      el('tbody', {}, rows.map(([z, sp, dir]) => el('tr', { class: z === H && !LEVELS.includes(H) ? 'cur' : '' },
+        el('td', {}, `${fmt(z, 0)} м`), el('td', {}, fmt(sp)), el('td', {}, `${fmt(dir, 0)}°`), el('td', {}, `${clockOf(dir, state.heading)} год`))))));
 }
 
 /* --- вантаж --- */
@@ -193,17 +264,24 @@ function bindAir() {
 }
 
 /* --- розрахунок і розбір --- */
+const fcOn = () => state.src === 'fc' && !!fc;
+// Повітря — з прогнозу, якщо він увімкнений (температура й тиск), інакше з полів «Повітря»
 const params = (height = state.height) => ({
   height,
   speed: state.speed,
   delay: state.delay,
-  wind: state.wind,
-  clock: state.clock,
-  profile: state.profile ? 1 / 7 : 0,
   tempC: state.tempC,
   elevation: state.elevation,
+  ...windSpec(state, state.height, fcOn() ? fc : null),
 });
 
+/** Вітер на висоті z словами для дрона: сила і година «звідки» відносно носа. */
+function windAt(s, z) {
+  const a = meanWind(s)(z);
+  const speed = Math.hypot(a.x, a.y);
+  const deg = (Math.atan2(-a.y, -a.x) * 180 / Math.PI + 360) % 360;
+  return { speed, clock: Math.round(deg / 30) % 12 || 12 };
+}
 
 function stat(label, value, unit, sub, cls = '') {
   return el('div', { class: `stat ${cls}` },
@@ -219,10 +297,12 @@ function render() {
     out.replaceChildren(el('p', { class: 'error' }, 'Перевір висоту і параметри вантажу — розрахунку немає.'));
     return;
   }
-  const r = solve(params(), load);
+  const s = params();
+  const r = solve(s, load);
   const dist = Math.hypot(r.x, r.y);
   const driftLen = Math.hypot(r.drift.x, r.drift.y);
   const hover = !state.speed;
+  const wTop = windAt(s, state.height), wLow = windAt(s, 2);
 
   const lines = [
     el('li', {}, `Падає ${fmt(r.time)} с, біля землі ${fmt(r.impactSpeed, 0)} м/с`
@@ -232,10 +312,10 @@ function render() {
     const delayPart = state.delay ? ` (з них ${fmt(state.speed * state.delay)} м — затримка скиду)` : '';
     lines.push(el('li', { class: 'carry' }, `Рух дрона ${fmt(state.speed)} м/с: вантаж летить вперед за інерцією і пролітає ${fmt(r.carry.x)} м${delayPart}.`));
   }
-  if (state.wind > 0) {
-    lines.push(el('li', { class: 'wind' }, driftLen >= 0.05
-      ? `Вітер ${fmt(state.wind)} м/с ${clockWord(state.clock)}: зносить на ${fmt(driftLen)} м (${where(r.drift.x, r.drift.y)}).`
-      : `Вітер ${fmt(state.wind)} м/с майже не встигає знести — менше 5 см.`));
+  if (wTop.speed > 0.05) {
+    lines.push(el('li', { class: 'wind' }, `Вітер на ${fmt(state.height, 0)} м — ${fmt(wTop.speed)} м/с ${clockWord(wTop.clock)}, біля землі — ${fmt(wLow.speed)} м/с: `
+      + (driftLen >= 0.05 ? `за час падіння зносить на ${fmt(driftLen)} м (${where(r.drift.x, r.drift.y)}).` : 'майже не встигає знести — менше 5 см.')));
+    lines.push(el('li', { class: 'wind', id: 'sc-line' }, 'Рахую розкид від поривів…'));
   }
   lines.push(el('li', { class: 'aim' }, dist < 0.1
     ? 'Скидай прямо над ціллю — поправка менша за 10 см.'
@@ -243,28 +323,32 @@ function render() {
       ? `Щоб влучити: зависни так, щоб ціль була ${where(r.x, r.y)} від точки під дроном — дрон стоїть проти вітру від цілі.`
       : `Щоб влучити: у момент скиду ціль має бути ${where(r.x, r.y)} від точки під дроном.`));
   lines.push(el('li', {}, `Бойова частина: ${describe(load)} від краю цілі.`));
-  lines.push(el('li', { class: 'small muted' }, 'Точка під дроном = центр кадру, лише коли камера дивиться строго вниз (−90°).'));
+  lines.push(el('li', { class: 'small muted' }, 'Точка під дроном = центр кадру, лише коли камера дивиться строго вниз (−90°). Як саме рахуємо — ⚙ → «Як рахуємо».'));
 
   out.replaceChildren(
     el('h2', {}, 'Куди впаде'),
     el('div', { class: 'stats' },
       stat('Точка падіння', fmt(dist), 'м', dist >= 0.05 ? where(r.x, r.y) : 'під дроном', 'hit'),
       stat('Час падіння', fmt(r.time), 'с', `з ${fmt(state.height, 0)} м`),
-      stat('Знесення вітром', fmt(driftLen), 'м', state.wind > 0 ? `${fmt(state.wind)} м/с, ${clockWord(state.clock)}` : 'без вітру'),
-      stat('Швидкість удару', fmt(r.impactSpeed, 0), 'м/с', `${fmt(r.impactAngle, 0)}° від вертикалі · гранична ${fmt(r.vt, 0)} м/с`)),
-    plan(r),
+      stat('Знесення вітром', fmt(driftLen), 'м', wTop.speed > 0.05 ? `${fmt(wTop.speed)} м/с, ${clockWord(wTop.clock)}` : 'без вітру'),
+      stat('Швидкість удару', fmt(r.impactSpeed, 0), 'м/с', `${fmt(r.impactAngle, 0)}° від вертикалі · гранична ${fmt(r.vt, 0)} м/с`),
+      el('div', { class: 'stat wide', id: 'sc-tile' }, el('div', { class: 'stat-label' }, 'Розкид від поривів'), el('div', { class: 'stat-value' }, '…'))),
+    plan(r, wTop),
     el('ul', { class: 'explain' }, lines),
     el('fieldset', { class: 'box' }, el('legend', {}, 'За висотою'), heightTable(load)));
+  scheduleScatter();
 }
 
 /* Схема згори: центр — точка під дроном, ніс угору; масштаб підбирається під точку падіння */
-function plan(r) {
+let planMap = null;
+function plan(r, w) {
   const pts = r.path.filter((_, i) => i % 15 === 0).concat([r.path[r.path.length - 1]]);
   const reach = Math.max(0.5, ...pts.map((p) => Math.hypot(p[0], p[1])));
   const step = niceStep(reach / 3);
   const rings = Math.max(1, Math.ceil(reach / step));
   const sc = 132 / (rings * step);
   const P = (x, y) => [y * sc, -x * sc];
+  planMap = P;
 
   const svg = el('svg:svg', { class: 'plan', viewBox: '-170 -170 340 340', role: 'img',
     'aria-label': `Схема згори: точка падіння ${where(r.x, r.y) || 'під дроном'}` });
@@ -280,18 +364,20 @@ function plan(r) {
   svg.append(el('svg:path', { class: 'track', d: pts.map((p, i) => `${i ? 'L' : 'M'}${P(p[0], p[1]).map((v) => v.toFixed(1)).join(',')}`).join(' ') }));
   svg.append(el('svg:path', { class: 'nadir', d: 'M-8,0 H8 M0,-8 V8' }),
     el('svg:text', { class: 'nadir-label', x: -10, y: 18, 'text-anchor': 'end' }, 'під дроном'));
+  // Розкид від поривів — дорисовується, коли пораховано
+  svg.append(el('svg:g', { id: 'plan-sc' }));
   const [hx, hy] = P(r.x, r.y);
   svg.append(el('svg:circle', { class: 'hit-ring', cx: hx, cy: hy, r: 9 }),
     el('svg:circle', { class: 'hit', cx: hx, cy: hy, r: 4 }),
     el('svg:text', { class: 'hit-label', x: hx + (hx > 90 ? -14 : 14), y: hy + (hy < -140 ? 20 : -10), 'text-anchor': hx > 90 ? 'end' : 'start' }, `${fmt(Math.hypot(r.x, r.y))} м`));
-  if (state.wind > 0) {
-    // Куди рухається повітря, у кутку схеми
-    const w = windVector(1, state.clock);
-    const dx = w.y, dy = -w.x;
+  if (w.speed > 0.05) {
+    // Куди рухається повітря на висоті скиду, у кутку схеми
+    const v = windVector(1, w.clock);
+    const dx = v.y, dy = -v.x;
     const cx = -128, cy = 132;
     svg.append(el('svg:line', { class: 'wind', x1: cx - dx * 16, y1: cy - dy * 16, x2: cx + dx * 10, y2: cy + dy * 10 }),
       el('svg:path', { class: 'wind-head', d: arrowHead(cx + dx * 18, cy + dy * 18, dx, dy, 8) }),
-      el('svg:text', { class: 'wind-label', x: cx + 26, y: cy + 4 }, `вітер ${fmt(state.wind)} м/с`));
+      el('svg:text', { class: 'wind-label', x: cx + 26, y: cy + 4 }, `вітер ${fmt(w.speed)} м/с`));
   }
   return svg;
 }
@@ -307,20 +393,83 @@ function heightTable(load) {
   const rows = heights.map((h) => {
     const s = params(h);
     const r = simulate(s, load);
-    const calm = state.wind > 0 ? simulate({ ...s, wind: 0 }, load) : r;
+    const calm = simulate({ ...s, wind: 0, levels: null }, load);
     return el('tr', { class: h === state.height ? 'cur' : '' },
       el('td', {}, `${fmt(h, 0)} м`),
       el('td', {}, fmt(r.time)),
       moving ? el('td', {}, fmt(calm.x)) : null,
       el('td', {}, fmt(Math.hypot(r.x - calm.x, r.y - calm.y))),
       // При зависанні точка падіння = знесення вітром, окрема колонка зайва
-      moving ? el('td', {}, fmt(Math.hypot(r.x, r.y))) : null);
+      moving ? el('td', {}, fmt(Math.hypot(r.x, r.y))) : null,
+      el('td', { 'data-h': h }, '…'));
   });
-  return el('table', { class: 'table' },
+  return el('table', { class: 'table', id: 'h-table' },
     el('thead', {}, el('tr', {},
       el('th', {}, 'Висота'), el('th', {}, 'Час, с'), moving ? el('th', {}, 'Вперед, м') : null,
-      el('th', {}, 'Вітер, м'), moving ? el('th', {}, 'Точка, м') : null)),
+      el('th', {}, 'Вітер, м'), moving ? el('th', {}, 'Точка, м') : null, el('th', {}, 'Розкид 90 %, м'))),
     el('tbody', {}, rows));
+}
+
+/* --- розкид від поривів: сотня скидів з різними поривами — важко, тож після паузи у введенні --- */
+let scT = 0;
+const scCache = new Map();
+function scheduleScatter() {
+  clearTimeout(scT);
+  scT = setTimeout(paintScatter, 160);
+}
+function scatterOf(s, load, n) {
+  const key = JSON.stringify([s, load.mass, load.diameter, load.cd, n]);
+  if (!scCache.has(key)) {
+    if (scCache.size > 60) scCache.clear();
+    scCache.set(key, scatter(s, load, { n }));
+  }
+  return scCache.get(key);
+}
+function paintScatter() {
+  const tile = $('sc-tile');
+  if (!tile) return;
+  const load = currentLoad();
+  const s = params();
+  const sc = scatterOf(s, load, 150);
+  const g = sc.g;
+  const line = $('sc-line');
+  if (!(sc.r90 > 0)) {
+    tile.replaceChildren(el('div', { class: 'stat-label' }, 'Розкид від поривів'), el('div', { class: 'stat-value' }, '0', el('small', {}, 'м')),
+      el('div', { class: 'stat-sub' }, 'пориви вимкнено або штиль'));
+    line?.remove();
+  } else {
+    tile.replaceChildren(el('div', { class: 'stat-label' }, 'Розкид від поривів'),
+      el('div', { class: 'stat-value' }, fmt(sc.r50), el('small', {}, 'м'), el('span', { class: 'stat-sep' }, ' / '), fmt(sc.r90), el('small', {}, 'м')),
+      el('div', { class: 'stat-sub' }, `половина скидів — у колі ${fmt(sc.r50)} м навколо точки, 9 з 10 — у ${fmt(sc.r90)} м · пориви до ${fmt(g.peak)} м/с`));
+    if (line) {
+      line.textContent = `Пориви: вітер на висоті скиду гуляє ±${fmt(g.su)} м/с (до ${fmt(g.peak)} м/с), один порив тримається ≈ ${fmt(g.T, 0)} с. `
+        + `Тому навіть ідеальний скид ляже не в точку, а в коло ${fmt(sc.r50)} м для половини скидів і ${fmt(sc.r90)} м для 9 з 10. `
+        + 'Скидай, коли вітер на дроні близький до середнього, — не в порив і не в затишшя.';
+    }
+    const P = planMap;
+    const box = $('plan-sc');
+    if (P && box) {
+      const ellipse = (k) => {
+        const { a, b, ang } = sc.ell;
+        const d = [];
+        for (let i = 0; i <= 48; i++) {
+          const t = (i / 48) * 2 * Math.PI;
+          const lx = a * k * Math.cos(t), ly = b * k * Math.sin(t);
+          const [px, py] = P(sc.mx + lx * Math.cos(ang) - ly * Math.sin(ang), sc.my + lx * Math.sin(ang) + ly * Math.cos(ang));
+          d.push(`${i ? 'L' : 'M'}${px.toFixed(1)},${py.toFixed(1)}`);
+        }
+        return d.join(' ');
+      };
+      // Еліпси на 50 % і 90 %: для двовимірного нормального розподілу — 1,18σ і 2,15σ
+      box.replaceChildren(...sc.pts.map(([x, y]) => { const [px, py] = P(x, y); return el('svg:circle', { class: 'sc-pt', cx: px.toFixed(1), cy: py.toFixed(1), r: 1.6 }); }),
+        el('svg:path', { class: 'sc-90', d: ellipse(2.146) }), el('svg:path', { class: 'sc-50', d: ellipse(1.177) }));
+    }
+  }
+  // Колонка розкиду в таблиці — по 60 скидів на висоту
+  for (const td of document.querySelectorAll('#h-table td[data-h]')) {
+    const r = scatterOf(params(+td.dataset.h), load, 60);
+    td.textContent = r.r90 > 0 ? fmt(r.r90) : '—';
+  }
 }
 
 /* --- оновлення екрана --- */
@@ -337,9 +486,22 @@ const calcWind = windPicker({ get: () => state, set: (v) => { Object.assign(stat
 
 function paintStatic() {
   calcWind.paint();
-  for (const b of $('profile').querySelectorAll('button')) b.classList.toggle('on', (b.dataset.v === '1') === state.profile);
+  for (const [id, key] of SEGS) for (const b of $(id).querySelectorAll('button')) b.classList.toggle('on', b.dataset.v === state[key]);
+  const on = fcOn();
+  $('w-hand').hidden = state.src !== 'hand';
+  $('w-fc').hidden = state.src !== 'fc';
+  if (state.src === 'fc') paintFc(fc ? '' : 'Прогнозу ще немає: встав координати й натисни «Прогноз». Поки рахую з ручного вітру.');
+  const s = params();
+  const w = windAt(s, state.height), g = gustStats(s);
+  $('w-sum').textContent = w.speed > 0.05
+    ? `На висоті скиду ${fmt(state.height, 0)} м: ${fmt(w.speed)} м/с ${clockWord(w.clock)}${g.su > 0.01 ? `, пориви до ${fmt(g.peak)} м/с` : ''}.`
+      + (on && state.meas > 0 && s.scale ? ` Прогноз підігнано під замір: ×${fmt(s.scale, 2)}.` : '')
+    : 'Штиль.';
   $('speed-hint').textContent = state.speed ? '' : '· зависання';
-  $('air-sum').textContent = `· ${fmt(state.tempC, 0)} °C, ${fmt(state.elevation, 0)} м над морем`;
+  for (const k of ['tempC', 'elevation']) $(`f-${k}`).disabled = on;
+  $('air-sum').textContent = on
+    ? `· з прогнозу: ${fmt(fc.tempC, 0)} °C, ${fmt(fc.pressure, 0)} гПа`
+    : `· ${fmt(state.tempC, 0)} °C, ${fmt(state.elevation, 0)} м над морем`;
 }
 
 function registerSW() {
@@ -406,7 +568,7 @@ $('gear').addEventListener('click', () => ($('pane-set').hidden ? showSettings()
 $('ver').textContent = `v${self.APP_VERSION}`;
 $('calc-wind').append(calcWind.el);
 bindPairs();
-bindProfile();
+bindWind();
 bindLoads();
 bindAir();
 paintLoads();

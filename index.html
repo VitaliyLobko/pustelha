@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0c111a">
   <meta name="description" content="Розрахунок скиду з дрона: висота, вітер, вантаж — точка падіння і поправка">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://api.open-meteo.com">
   <title>Пустельга</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
@@ -61,15 +61,16 @@
           <p>Вид з камери дрона строго вниз, ніс дрона — угорі кадру. Приціл — точка під дроном. Дрон висить на місці: вантаж летить без швидкості дрона, його зносить вітер.</p>
           <ul class="sim-legend">
             <li><span class="lg-ico lg-txt">☝</span><span><b>Приціл</b> — тягни одним пальцем будь-де по кадру: приціл їде за пальцем, палець його не закриває.</span></li>
-            <li><span class="lg-ico lg-txt">✌</span><span><b>Двома пальцями</b>: розвести-звести — кратність, разом вгору-вниз — висота.</span></li>
-            <li><span class="lg-ico lg-txt">↕</span><span><b>Висота</b> — плашка внизу ліворуч: свайп по ній вгору-вниз або тап — повзунок. Нова висота — нова ситуація.</span></li>
+            <li><span class="lg-ico lg-txt">✌</span><span><b>Двома пальцями</b>: розвести-звести — кратність, тягнути — дрон летить над місцевістю разом із прицілом.</span></li>
+            <li><span class="lg-ico lg-txt">↕</span><span><b>Висота</b> — плашка внизу ліворуч: свайп по ній вгору-вниз або тап — повзунок. Висота — лише тут: цілі лишаються на землі там, де були.</span></li>
             <li><span class="lg-ico lg-txt">⛶</span><span><b>Ціль</b> — угорі праворуч «1/5»: тап — наступна ціль. Вибрана підсвічена жовтим, промах рахується до неї.</span></li>
             <li><span class="lg-ico lg-txt">🔍</span><span><b>Кратність</b> — поруч із ціллю, 1–8×: свайп по ній вліво-вправо або тап — повзунок. Цілі лишаються на місцях.</span></li>
             <li><span class="lg-ico lg-txt">⊕</span><span><b>Сітка</b> — кругла кнопка під ними: хрест, хрест з колом, метри на землі, точка.</span></li>
             <li><span class="lg-ico lg-txt">◫</span><span><b>Рахунок</b> — внизу праворуч: уражено цілей / скиди в цій ситуації.</span></li>
-            <li><span class="lg-ico lg-txt">👁</span><span><b>Підказка</b> — синє кільце: куди впаде вантаж, скинутий зараз.</span></li>
+            <li><span class="lg-ico lg-txt">👁</span><span><b>Підказка</b> — синє кільце: куди впаде вантаж, скинутий зараз; блакитна пляма навколо — розкид від поривів, туди падає половина скидів.</span></li>
+            <li><span class="lg-ico lg-txt">➜</span><span><b>Вітер</b> — плашка вгорі: стрілка — куди дме зараз, число — сила з поривом. Помаранчева — порив, сильніше за середній; бліда — затишшя. Скид летить із тим вітром, що був у момент натискання.</span></li>
             <li><span class="lg-ico lg-txt">⟳</span><span><b>Нова ситуація</b> — цілі на нових місцях; ▾ поруч — що міняти ще: статично, вітер, рух або все разом.</span></li>
-            <li><span class="lg-ico lg-txt">‹›</span><span><b>Ціль, Вітер, Рух</b> — тап відкриває вибір, свайп по кнопці — наступне значення. Ціль — стрічкою: гортай, посередині в рамці — опис, тап — вибрати.</span></li>
+            <li><span class="lg-ico lg-txt">‹›</span><span><b>Ціль, Вітер, Рух</b> — тап відкриває вибір, свайп по кнопці — наступне значення, довге натискання на Вітер чи Рух — скинути у штиль / цілі стоять. Ціль — стрічкою: гортай, посередині в рамці — опис, тап — вибрати.</span></li>
           </ul>
           <h4 class="lg-head">Позначки на кадрі — знаки НАТО (APP-6)</h4>
           <ul class="sim-legend">
@@ -135,12 +136,35 @@
 
     <fieldset class="box">
       <legend>Вітер</legend>
-      <div class="calc-wind" id="calc-wind"></div>
-      <div class="label">Біля землі</div>
-      <div class="seg" id="profile">
-        <button type="button" data-v="1">Слабшає до землі</button>
-        <button type="button" data-v="0">Такий самий</button>
+      <div class="seg" id="w-src">
+        <button type="button" data-v="hand">Вручну</button>
+        <button type="button" data-v="fc">Прогноз за місцем</button>
       </div>
+      <div id="w-hand">
+        <div class="calc-wind" id="calc-wind"></div>
+        <div class="label">Де виміряно</div>
+        <div class="seg" id="w-ref"></div>
+      </div>
+      <div id="w-fc" hidden>
+        <label class="field" for="fc-pos"><span>Місце — координати чи посилання з Google Maps</span></label>
+        <div class="fc-row">
+          <input type="text" id="fc-pos" placeholder="48.51, 37.98" autocomplete="off" spellcheck="false">
+          <button type="button" class="btn" id="fc-get">Прогноз</button>
+        </div>
+        <p class="note">У Google Maps довго натисни на місце → цифри вгорі скопіюються → встав сюди. Точне місце нікуди не йде: на пристрої воно огрублюється до ≈ 10 км, а запит іде на сітку з 25 точок у квадраті ≈ 110 × 70 км — сервер не знає, яка з них твоя.</p>
+        <div id="fc-out" aria-live="polite"></div>
+        <div class="load-grid two">
+          <label class="field"><span>Курс дрона — куди ніс, °</span><input type="number" id="f-heading" inputmode="decimal" min="0" max="359" step="5"></label>
+          <label class="field"><span>Замір на місці, м/с</span><input type="number" id="f-meas" inputmode="decimal" min="0" step="0.5" placeholder="необов'язково"></label>
+        </div>
+        <div class="label">Замір — де виміряно</div>
+        <div class="seg" id="w-meas-at"></div>
+      </div>
+      <div class="label">Місцевість під дроном</div>
+      <div class="chips" id="w-terrain"></div>
+      <div class="label">Пориви</div>
+      <div class="seg" id="w-gust"></div>
+      <p class="note" id="w-sum"></p>
     </fieldset>
 
     <fieldset class="box">

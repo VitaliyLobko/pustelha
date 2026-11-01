@@ -16,6 +16,8 @@ const ASSETS = [
   './js/settings.js',
   './js/theme-boot.js',
   './js/warhead.js',
+  './js/wind.js',
+  './js/forecast.js',
   './icons/icon.svg',
   './icons/icon-192.png',
   './icons/icon-512.png',
