@@ -534,7 +534,18 @@ function registerSW() {
 const TAB_KEY = 'pustelha:tab';
 let sim = null;
 let tabNow = 'sim';
-function showTab(tab) {
+// Перейшов в інший розділ — його значок у нижній панелі пару секунд грає свою анімацію; при старті — ні
+let tabPlay = 0;
+function playTab(tab) {
+  const b = document.querySelector(`.tabs button[data-tab="${tab}"]`);
+  for (const o of document.querySelectorAll('.tabs button')) o.classList.remove('play');
+  void b.offsetWidth;
+  b.classList.add('play');
+  clearTimeout(tabPlay);
+  tabPlay = setTimeout(() => b.classList.remove('play'), 2600);
+}
+function showTab(tab, { play = true } = {}) {
+  if (play && (tab !== tabNow || !$('pane-set').hidden)) playTab(tab);
   tabNow = tab;
   for (const b of document.querySelectorAll('.tabs button')) {
     b.classList.toggle('on', b.dataset.tab === tab);
@@ -574,5 +585,17 @@ bindAir();
 paintLoads();
 paintStatic();
 render();
-showTab(read(TAB_KEY, 'sim') === 'calc' ? 'calc' : 'sim');
+showTab(read(TAB_KEY, 'sim') === 'calc' ? 'calc' : 'sim', { play: false });
 registerSW();
+// Мобільний Chrome то показує, то ховає адресний рядок: видима частина екрана нижча за сторінку, і нижня панель
+// опиняється під краєм — піднімаємо її на цю різницю. Великий відступ (клавіатура) ігноруємо
+if (window.visualViewport) {
+  const placeTabs = () => {
+    const vv = window.visualViewport;
+    const gap = Math.round(document.documentElement.clientHeight - vv.height - vv.offsetTop);
+    document.documentElement.style.setProperty('--vv-gap', `${gap > 0 && gap < 120 ? gap : 0}px`);
+  };
+  visualViewport.addEventListener('resize', placeTabs);
+  visualViewport.addEventListener('scroll', placeTabs);
+  placeTabs();
+}

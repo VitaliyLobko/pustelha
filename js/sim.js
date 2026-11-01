@@ -83,7 +83,7 @@ export function initSim({ loads, loadById }) {
   let bombs = [], bursts = [];
   let hint = null, hintSc = null;
   let loop = 0, lastT = 0;
-  let msgT = 0;
+  let msgT = 0, fireT = 0;
   // Прогноз береться з «Розрахунку»; у тренажері — лише якщо ввімкнено «Реальний»
   let fc = loadFc();
 
@@ -150,6 +150,8 @@ export function initSim({ loads, loadById }) {
     reticle.e = reticle.n = 0;
     cam.e = cam.n = 0;
     bombs = []; bursts = [];
+    clearTimeout(fireT);
+    $('sim-drop').classList.remove('fire');
     ground = null;
     paintOut();
     paintScore();
@@ -508,7 +510,23 @@ export function initSim({ loads, loadById }) {
     round.drops++;
     vibrate(15);
     paintScore();
+    flyBomb(r.time);
     kick();
+  }
+
+  /** «Скид» — як «Перевірити» в Shooter's Log: авіабомба летить від лівого краю кнопки за правий рівно за час падіння. */
+  function flyBomb(T) {
+    const btn = $('sim-drop');
+    // Новий скид, поки летить попередній, — бомба знову стартує від лівого краю
+    btn.classList.remove('fire');
+    void btn.offsetWidth;
+    const b = btn.getBoundingClientRect(), ico = btn.querySelector('.drop-ico').getBoundingClientRect();
+    btn.style.setProperty('--from', `${b.left - ico.right}px`);
+    btn.style.setProperty('--fly', `${b.right - ico.left}px`);
+    btn.style.setProperty('--fall', `${T}s`);
+    btn.classList.add('fire');
+    clearTimeout(fireT);
+    fireT = setTimeout(() => btn.classList.remove('fire'), T * 1000);
   }
 
   function land(b, now) {

@@ -30,10 +30,6 @@
   </div>
 
   <main class="view">
-    <div class="seg tabs" role="tablist">
-      <button type="button" role="tab" data-tab="sim">Тренажер</button>
-      <button type="button" role="tab" data-tab="calc">Розрахунок</button>
-    </div>
 
     <section class="pane" id="pane-sim" hidden>
       <div class="sim">
@@ -107,7 +103,7 @@
         <div class="sim-panel" id="sim-tgt" hidden></div>
         <div class="sim-panel" id="sim-wind" hidden></div>
         <div class="sim-panel" id="sim-move" hidden></div>
-        <button type="button" class="drop-btn" id="sim-drop">Скид</button>
+        <button type="button" class="drop-btn" id="sim-drop"><svg class="drop-ico" viewBox="0 0 24 12" aria-hidden="true"><path d="M6.6 5.1 10 3.1h7.3c2.7 0 5 1.3 5 2.9s-2.3 2.9-5 2.9H10L6.6 6.9z"/><path d="M7.6 5.3 4.4 2.2H2.6v7.6h1.8l3.2-3.1z"/><path class="band" d="M13.2 3.3v5.4"/><path class="spd" d="M-2 3.6h3.4M-3 6h4.4M-2 8.4h3.4"/></svg><span>Скид</span></button>
         <div class="readout" id="sim-out" aria-live="polite"></div>
       </div>
     </section>
@@ -196,5 +192,16 @@
     <section class="result" id="result" aria-live="polite"></section>
     </section>
   </main>
+
+  <nav class="tabs" role="tablist" aria-label="Розділи">
+    <button type="button" role="tab" data-tab="sim">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path class="rot" d="M2 4h7"/><path class="rot" d="M15 4h7"/><path d="M5.5 4v2.5M18.5 4v2.5"/><path d="M5.5 6.5h13"/><path d="M9 6.5v.5a3 3 0 0 0 6 0v-.5"/><g class="drop"><path d="M12 10v.2"/><path d="M12 10.2c1.3 0 2 1 2 2.3s-.9 2.6-2 3c-1.1-.4-2-1.7-2-3s.7-2.3 2-2.3z"/></g><circle class="boom" cx="12" cy="19.5" r="2.5"/><path d="M3 21h18"/></svg>
+      <span>Тренажер</span>
+    </button>
+    <button type="button" role="tab" data-tab="calc">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 3v17.5H21"/><path class="arc" d="M5 5c6 0 11 4 13 13" stroke-dasharray="1.6 2.2"/><circle class="aim" cx="18" cy="18" r="2.6"/><circle class="ball" cx="5" cy="5" r="1.6" fill="currentColor"/></svg>
+      <span>Розрахунок</span>
+    </button>
+  </nav>
 </body>
 </html>
