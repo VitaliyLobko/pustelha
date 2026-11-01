@@ -415,24 +415,26 @@ export function initSim({ loads, loadById }) {
     if (!loop) draw();
   });
 
-  /* --- жести на кадрі: палець на прицілі — тягне приціл; деінде свайп: вгору-вниз — висота, вліво-вправо — кратність --- */
-  const GRAB = 46;
+  /* --- жести на кадрі: один палець будь-де — тягне приціл; два пальці: щипок — кратність, разом вгору-вниз — висота --- */
+  // Вгору — вище: 1 px ≈ 0,8 м, крок 5 м; вправо — більша кратність, крок на кожні 40 px
+  const liftTo = (h0, dy) => Math.max(25, Math.min(300, Math.round((h0 - dy * 0.8) / 5) * 5));
+  const zoomTo = (z0, dx) => Math.max(1, Math.min(8, z0 + Math.round(dx / 40)));
+  const fingers = new Map();
   let gest = null;
+  const pair = () => {
+    const [a, b] = [...fingers.values()];
+    return { d: Math.hypot(a.x - b.x, a.y - b.y), y: (a.y + b.y) / 2 };
+  };
   cv.addEventListener('pointerdown', (e) => {
     cv.setPointerCapture(e.pointerId);
-    const box = cv.getBoundingClientRect();
-    const [rx, ry] = toS(reticle.e, reticle.n);
-    const onReticle = Math.hypot(e.clientX - box.left - rx, e.clientY - box.top - ry) < GRAB;
-    gest = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, mode: onReticle ? 'aim' : null, h0: state.height, z0: state.zoom };
+    fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (fingers.size === 1) gest = { mode: 'aim', x: e.clientX, y: e.clientY };
+    else if (fingers.size === 2) gest = { mode: null, ...pair(), h0: state.height, z0: state.zoom };
   });
   cv.addEventListener('pointermove', (e) => {
-    if (!gest || !cv.hasPointerCapture(e.pointerId)) return;
-    const dx = e.clientX - gest.x0, dy = e.clientY - gest.y0;
-    // Напрям свайпу — за першими 10 px руху
-    if (!gest.mode) {
-      if (Math.hypot(dx, dy) < 10) return;
-      gest.mode = Math.abs(dy) > Math.abs(dx) ? 'height' : 'zoom';
-    }
+    const f = fingers.get(e.pointerId);
+    if (!f || !gest) return;
+    f.x = e.clientX; f.y = e.clientY;
     if (gest.mode === 'aim') {
       // Відносно, щоб палець не закривав приціл
       reticle.e += (e.clientX - gest.x) / ppm;
@@ -440,20 +442,60 @@ export function initSim({ loads, loadById }) {
       clampReticle();
       gest.x = e.clientX; gest.y = e.clientY;
       if (!loop) draw();
-    } else if (gest.mode === 'height') {
-      // Вгору — вище: 1 px ≈ 0,8 м, крок 5 м
-      setView({ height: Math.max(25, Math.min(300, Math.round((gest.h0 - dy * 0.8) / 5) * 5)) });
-    } else {
-      // Вправо — більша кратність: крок на кожні 40 px
-      setView({ zoom: Math.max(1, Math.min(8, gest.z0 + Math.round(dx / 40))) });
+      return;
     }
+    if (fingers.size < 2) return;
+    const p = pair();
+    // Що саме робимо — вирішує перший помітний рух: розвели пальці чи посунули обидва
+    if (!gest.mode) {
+      if (Math.abs(p.d - gest.d) > 24) gest.mode = 'zoom';
+      else if (Math.abs(p.y - gest.y) > 16) gest.mode = 'height';
+      else return;
+    }
+    if (gest.mode === 'zoom') setView({ zoom: Math.max(1, Math.min(8, Math.round(gest.z0 * p.d / gest.d))) });
+    else setView({ height: liftTo(gest.h0, p.y - gest.y) });
   });
-  const endGest = () => {
-    if (gest?.mode === 'height' || gest?.mode === 'zoom') settleView(gest.mode === 'height');
-    gest = null;
+  const endGest = (e) => {
+    fingers.delete(e.pointerId);
+    // Другий палець після щипка не підхоплює приціл — жест закінчується, коли піднято всі
+    if (gest && gest.mode !== 'aim') {
+      if (gest.mode) settleView(gest.mode === 'height');
+      gest = { mode: 'done' };
+    }
+    if (!fingers.size) gest = null;
   };
   cv.addEventListener('pointerup', endGest);
   cv.addEventListener('pointercancel', endGest);
+
+  /** Свайп по плашці: висота — вгору-вниз, кратність — вліво-вправо; без руху це звичайний тап, що відкриває повзунок. */
+  function badgeSwipe(btn, axis) {
+    let s = null, swipedAt = 0;
+    // Після свайпу браузер ще надішле click — він не має відкривати повзунок
+    btn.addEventListener('click', (e) => { if (performance.now() - swipedAt < 400) e.stopImmediatePropagation(); }, { capture: true });
+    btn.addEventListener('pointerdown', (e) => {
+      btn.setPointerCapture(e.pointerId);
+      s = { x: e.clientX, y: e.clientY, h0: state.height, z0: state.zoom, moved: false };
+    });
+    btn.addEventListener('pointermove', (e) => {
+      if (!s) return;
+      const dx = e.clientX - s.x, dy = e.clientY - s.y;
+      if (!s.moved && Math.abs(axis === 'y' ? dy : dx) < 8) return;
+      s.moved = true;
+      if (axis === 'y') setView({ height: liftTo(s.h0, dy) });
+      else setView({ zoom: zoomTo(s.z0, dx) });
+    });
+    const end = () => {
+      if (s?.moved) {
+        settleView(axis === 'y');
+        swipedAt = performance.now();
+      }
+      s = null;
+    };
+    btn.addEventListener('pointerup', end);
+    btn.addEventListener('pointercancel', () => { if (s?.moved) settleView(axis === 'y'); s = null; });
+  }
+  badgeSwipe($('sim-h-btn'), 'y');
+  badgeSwipe($('sim-z-btn'), 'x');
 
   function clampReticle() {
     const lim = spanM() * 0.48;
