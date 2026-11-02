@@ -1,5 +1,5 @@
 import { solve, simulate, meanWind, levelWind, scatterSliced, gustStats } from './ballistics.js';
-import { TERRAINS, GUSTS, REFS, z0Of, clockOf, windSpec } from './wind.js';
+import { TERRAINS, GUSTS, GUSTS_FC, REFS, z0Of, clockOf, windSpec } from './wind.js';
 import { LEVELS, parseCoords, coarse, posText, fetchForecast, loadFc, saveFc, fcAge, fcSlot } from './forecast.js';
 import { $, el, fmt, num, read, write, arrowHead, clockWord, where } from './ui.js';
 import { windPicker } from './wind-pick.js';
@@ -418,13 +418,21 @@ function render() {
 
 /* Схема згори: центр — точка під дроном, ніс угору; масштаб підбирається під точку падіння */
 let planMap = null;
+const NORTH_KEY = 'pustelha:plan-north';
+let northUp = read(NORTH_KEY, false);
 function plan(r, w) {
   const pts = r.path.filter((_, i) => i % 3 === 0).concat([r.path[r.path.length - 1]]);
   const reach = Math.max(0.5, ...pts.map((p) => Math.hypot(p[0], p[1])));
   const step = niceStep(reach / 3);
   const rings = Math.max(1, Math.ceil(reach / step));
   const sc = 132 / (rings * step);
-  const P = (x, y) => [y * sc, -x * sc];
+  // З прогнозом відомо, де північ: компас у куті; «північ угору» — схема як карта, інакше — ніс угору, як у камері
+  const compass = fcOn();
+  const turn = compass && northUp ? (state.heading || 0) * Math.PI / 180 : 0;
+  const cs = Math.cos(turn), sn = Math.sin(turn);
+  // x — вперед по носу, y — праворуч → екран
+  const S = (x, y) => [x * sn + y * cs, -(x * cs - y * sn)];
+  const P = (x, y) => { const [a, b] = S(x, y); return [a * sc, b * sc]; };
   planMap = P;
 
   const svg = el('svg:svg', { class: 'plan', viewBox: '-170 -170 340 340', role: 'img',
@@ -436,8 +444,10 @@ function plan(r, w) {
     svg.append(el('svg:circle', { class: 'ring', r: rr }),
       el('svg:text', { class: 'ring-label', x: rr * 0.71 + 3, y: -rr * 0.71 - 3 }, `${fmt(k * step, step < 1 ? 1 : 0)} м`));
   }
-  svg.append(el('svg:path', { class: 'nose', d: 'M-6,-150 L0,-162 L6,-150 Z' }),
-    el('svg:text', { class: 'nose-label', x: 10, y: -152 }, 'ніс дрона'));
+  svg.append(el('svg:path', { class: 'nose', d: compass && northUp ? 'M-10,-146 L0,-166 L10,-146 Z' : 'M-6,-150 L0,-162 L6,-150 Z',
+    transform: `rotate(${(turn * 180 / Math.PI).toFixed(1)})` }));
+  // «Північ угору»: ніс ходить по колу й наїжджав би на підписи кілець — лишаємо самий трикутник
+  if (!(compass && northUp)) svg.append(el('svg:text', { class: 'nose-label', x: 10, y: -152 }, 'ніс дрона'));
   svg.append(el('svg:path', { class: 'track', d: pts.map((p, i) => `${i ? 'L' : 'M'}${P(p[0], p[1]).map((v) => v.toFixed(1)).join(',')}`).join(' ') }));
   svg.append(el('svg:path', { class: 'nadir', d: 'M-8,0 H8 M0,-8 V8' }),
     el('svg:text', { class: 'nadir-label', x: -10, y: 18, 'text-anchor': 'end' }, 'під дроном'));
@@ -450,13 +460,34 @@ function plan(r, w) {
   if (w.speed > 0.05) {
     // Куди рухається повітря на висоті скиду, у кутку схеми
     // Точний напрям, а не округлений до години: з прогнозу вітер рідко дме рівно з «години»
-    const dx = w.y / w.speed, dy = -w.x / w.speed;
+    const [dx, dy] = S(w.x / w.speed, w.y / w.speed);
     const cx = -128, cy = 132;
     svg.append(el('svg:line', { class: 'wind', x1: cx - dx * 16, y1: cy - dy * 16, x2: cx + dx * 10, y2: cy + dy * 10 }),
       el('svg:path', { class: 'wind-head', d: arrowHead(cx + dx * 18, cy + dy * 18, dx, dy, 8) }),
       el('svg:text', { class: 'wind-label', x: cx + 26, y: cy + 4 }, `вітер ${fmt(w.speed)} м/с`));
   }
+  if (compass) svg.append(planCompass(S));
   return svg;
+}
+
+/** Компас у куті схеми: стрілка — на північ; тап перемикає «ніс угору» ↔ «північ угору». */
+function planCompass(S) {
+  const h = (state.heading || 0) * Math.PI / 180;
+  // Північ в осях дрона: вперед cos h, праворуч −sin h
+  const [ex, ey] = S(Math.cos(h), -Math.sin(h));
+  const deg = (Math.atan2(ex, -ey) * 180 / Math.PI).toFixed(1);
+  const flip = () => { northUp = !northUp; write(NORTH_KEY, northUp); render(); };
+  return el('svg:g', {
+    class: `plan-compass${northUp ? ' on' : ''}`, transform: 'translate(126 122)', role: 'button', tabindex: '0',
+    'aria-pressed': String(northUp), 'aria-label': northUp ? 'Схема: північ угору. Натисни — ніс угору' : 'Схема: ніс угору. Натисни — північ угору',
+    onclick: flip, onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); } },
+  },
+  el('svg:circle', { class: 'pc-hit', r: 28 }),
+  el('svg:circle', { class: 'pc-ring', r: 20 }),
+  el('svg:g', { transform: `rotate(${deg})` },
+    el('svg:path', { class: 'pc-n', d: 'M0,-17 L6,0 L-6,0 Z' }),
+    el('svg:path', { class: 'pc-s', d: 'M0,17 L6,0 L-6,0 Z' })),
+  el('svg:text', { class: 'pc-label', x: ex * 33, y: ey * 33 }, 'Пн'));
 }
 
 function niceStep(v) {
@@ -601,6 +632,9 @@ function paintStatic() {
   $('w-terr').hidden = state.src === 'fc';
   $('w-meas-box').hidden = !(state.meas > 0);
   rose?.paint();
+  // З прогнозом перемикач поривів — множник до прогнозних, тож і підписи про це
+  for (const b of $('w-gust').querySelectorAll('button')) b.textContent = on ? GUSTS_FC[b.dataset.v] : GUSTS.find(([k]) => k === b.dataset.v)[1];
+  $('w-gust-label').textContent = on ? 'Пориви — відносно прогнозу' : 'Пориви';
   if (state.src === 'fc') paintFc(fc ? '' : 'Прогнозу ще немає: встав координати й натисни «Прогноз». Поки рахую з ручного вітру.');
   const s = params();
   const w = windAt(s, state.height), g = gustStats(s);

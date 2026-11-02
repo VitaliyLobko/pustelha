@@ -278,14 +278,18 @@ input[readonly] { color: var(--muted); background: transparent; }
 .calc-wind { margin-top: 6px; }
 /* Курс — числом і сторонами світу; година прогнозу — рядком кнопок */
 .head-row { display: grid; gap: 6px; margin-top: 12px; }
+/* Курс — число в рядок із підписом: роза під ним і так показує градуси */
+.head-field { display: grid; grid-template-columns: minmax(0, 1fr) 88px; align-items: center; gap: 10px; margin: 0; }
+.head-field input { text-align: center; }
 .cr { display: grid; justify-items: center; gap: 2px; }
-.cr-rose { position: relative; width: min(220px, 64vw); aspect-ratio: 1; border-radius: 50%; touch-action: none; cursor: grab; }
+.cr-rose { position: relative; width: min(190px, 56vw); aspect-ratio: 1; border-radius: 50%; touch-action: none; cursor: grab; }
 .cr-rose:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .cr-face svg { display: block; width: 100%; height: 100%; }
 .cr-ring { fill: var(--surface); stroke: var(--text); stroke-opacity: .55; stroke-width: .7; }
 .cr-tick { stroke: var(--muted); stroke-width: .6; }
 .cr-tick.cr-major { stroke: var(--text); stroke-width: 1; }
-.cr-side { fill: var(--text); font-size: 8.5px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+.cr-side { fill: var(--text); font-size: 8.5px; font-weight: 700; text-anchor: middle; dominant-baseline: central;
+  paint-order: stroke; stroke: var(--surface); stroke-width: 2.5px; stroke-linejoin: round; }
 .cr-side.cr-north { fill: var(--bad); }
 .cr-needle line { stroke: var(--accent); stroke-width: 2.4; stroke-linecap: round; }
 .cr-needle path { fill: var(--accent); }
@@ -555,13 +559,22 @@ input[readonly] { color: var(--muted); background: transparent; }
 .map-bot .actions .btn { min-height: 44px; }
 .fc-table { margin-top: 8px; }
 #w-terrain { margin-bottom: 2px; }
-#w-sum { color: var(--text); }
+.w-sum { margin: 10px 0 2px; font-size: 15px; font-weight: 650; color: var(--text); }
+.w-sum:empty { display: none; }
 .plan { display: block; width: 100%; max-width: 420px; margin: 0 auto; aspect-ratio: 1; }
 .plan .ring { fill: none; stroke: var(--line); }
 .plan .ring-label { fill: var(--muted); font-size: 9px; }
 .plan .axis { stroke: var(--line); stroke-dasharray: 3 4; }
 .plan .nadir { stroke: var(--text); stroke-width: 1.5; }
 .plan .nadir-label, .plan .nose-label { fill: var(--muted); font-size: 10px; }
+.plan-compass { cursor: pointer; outline: none; }
+.plan-compass .pc-hit { fill: transparent; }
+.plan-compass .pc-ring { fill: var(--surface-2); stroke: var(--line); stroke-width: 1.5; }
+.plan-compass.on .pc-ring, .plan-compass:focus-visible .pc-ring { stroke: var(--accent); stroke-width: 3; }
+.plan-compass .pc-n { fill: var(--bad); }
+.plan-compass .pc-s { fill: var(--muted); opacity: .6; }
+.plan .pc-label { fill: var(--bad); font-size: 13px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+.calc-top .plan .pc-label { font-size: 17px; }
 .plan .track { fill: none; stroke: var(--c-carry); stroke-width: 1.6; stroke-dasharray: 4 3; }
 .plan .hit { fill: var(--c-hit); }
 .plan .hit-ring { fill: none; stroke: var(--c-hit); stroke-width: 1.5; }

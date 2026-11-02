@@ -111,7 +111,8 @@
         <h4 class="lg-head">Схема</h4>
         <ul class="sim-legend">
           <li><svg class="plan lg-plan" viewBox="0 0 34 30" aria-hidden="true"><path class="nadir" d="M11 15h12M17 9v12"/></svg><span><b>Хрестик у центрі</b> — точка під дроном. Це центр кадру, лише коли камера дивиться строго вниз (−90°).</span></li>
-          <li><svg class="plan lg-plan" viewBox="0 0 34 30" aria-hidden="true"><path class="nose" d="M12 21 17 9 22 21Z"/></svg><span><b>▲ ніс дрона</b> — завжди вгорі схеми.</span></li>
+          <li><svg class="plan lg-plan" viewBox="0 0 34 30" aria-hidden="true"><path class="nose" d="M12 21 17 9 22 21Z"/></svg><span><b>▲ ніс дрона</b> — вгорі схеми, як у камері.</span></li>
+          <li><svg class="plan lg-plan" viewBox="0 0 34 30" aria-hidden="true"><g class="plan-compass" transform="translate(17 15)"><circle class="pc-ring" r="11"/><path class="pc-n" d="M0-9 3 0h-6z"/><path class="pc-s" d="M0 9 3 0h-6z"/></g></svg><span><b>Компас</b> — є, коли вітер з прогнозу: червоне — на північ. Тап по ньому — «північ угору»: схема як карта, а ▲ ніс дрона показує курс. Ще тап — знову ніс угору.</span></li>
           <li><svg class="plan lg-plan" viewBox="0 0 34 30" aria-hidden="true"><circle class="ring" cx="17" cy="15" r="12"/><circle class="ring" cx="17" cy="15" r="6"/></svg><span><b>Кола з підписами</b> — відстань від точки під дроном. Масштаб підбирається сам, щоб точка падіння вміщалась: дивись на підписи.</span></li>
           <li><svg class="plan lg-plan" viewBox="0 0 34 30" aria-hidden="true"><path class="track" d="M5 7Q19 8 29 23"/></svg><span><b>Жовтий пунктир</b> — шлях вантажу над землею від скиду до удару: куди його веде рух дрона й вітер.</span></li>
           <li><svg class="plan lg-plan" viewBox="0 0 34 30" aria-hidden="true"><circle class="hit-ring" cx="17" cy="15" r="7"/><circle class="hit" cx="17" cy="15" r="3"/></svg><span><b>Червона точка з кільцем</b> — куди впаде за середнього вітру, поруч — відстань до неї. Щоб влучити, ціль має бути саме там.</span></li>
@@ -148,6 +149,7 @@
         <button type="button" data-v="hand">Вручну</button>
         <button type="button" data-v="fc">Прогноз за місцем</button>
       </div>
+      <p class="w-sum" id="w-sum" aria-live="polite"></p>
       <div id="w-hand">
         <div class="label">Де виміряно</div>
         <div class="seg" id="w-ref"></div>
@@ -161,14 +163,13 @@
           <button type="button" class="btn" id="fc-map" aria-label="Вибрати на карті" title="Вибрати на карті"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/></svg></button>
           <button type="button" class="btn" id="fc-get">Прогноз</button>
         </div>
-        <p class="note">Назва, тап на карті чи координати. Як бережемо місце — у «Налаштування → Як рахуємо».</p>
         <div id="fc-out" aria-live="polite"></div>
         <div class="fc-ext"><span>Вітер на карті:</span><a class="btn" id="fc-windy" target="_blank" rel="noopener">Windy</a><a class="btn" id="fc-ventusky" target="_blank" rel="noopener">Ventusky</a></div>
         <div class="head-row">
-          <label class="field"><span>Курс дрона — куди дивиться ніс, °</span><input type="number" id="f-heading" inputmode="decimal" min="0" max="359" step="5"></label>
+          <label class="field head-field"><span>Курс дрона — куди дивиться ніс, °</span><input type="number" id="f-heading" inputmode="decimal" min="0" max="359" step="5"></label>
           <div id="w-head"></div>
         </div>
-        <p class="note">Курс — з компаса в застосунку дрона. Від нього залежить, звідки дме відносно носа: 0° — ніс на північ, 90° — на схід.</p>
+        <p class="note">З компаса в застосунку дрона. Потрібен, щоб перевести вітер «зі сходу» в «справа від носа».</p>
         <label class="field meas-field"><span>Замір на місці, м/с</span><input type="number" id="f-meas" inputmode="decimal" min="0" step="0.5" placeholder="необов'язково"></label>
         <div id="w-meas-box" hidden>
           <div class="label">Замір — де виміряно</div>
@@ -179,9 +180,8 @@
         <div class="label">Місцевість під дроном</div>
         <div class="chips" id="w-terrain"></div>
       </div>
-      <div class="label">Пориви</div>
+      <div class="label" id="w-gust-label">Пориви</div>
       <div class="seg" id="w-gust"></div>
-      <p class="note" id="w-sum"></p>
       </div>
       <div class="sim-panel calc-panel" id="cp-load" hidden>
       <select id="load"></select>

@@ -5,8 +5,10 @@ import { levelWind } from './ballistics.js';
 export const TERRAINS = [['open', 'Поле', 0.03], ['bush', 'Кущі', 0.1], ['rough', 'Посадки, руїни', 0.3], ['forest', 'Ліс, місто', 1]];
 // Множник сили поривів: «помірні» — звичайна приземна турбулентність для цієї місцевості
 export const GUSTS = [['none', 'Без', 0], ['calm', 'Слабкі', 0.6], ['mid', 'Помірні', 1], ['strong', 'Сильні', 1.5]];
+// З прогнозом ті самі множники — відносно його поривів
+export const GUSTS_FC = { none: 'Без', calm: 'Слабші', mid: 'Прогноз', strong: 'Сильніші' };
 // Де виміряно вітер: дрон показує свій вітер на висоті; 10 м — метеостанції й прогнози; біля землі — анемометр у руці
-export const REFS = [['drone', 'На висоті дрона'], ['10', '10 м'], ['2', 'Біля землі']];
+export const REFS = [['drone', 'На дроні'], ['10', '10 м'], ['2', 'Біля землі']];
 
 export const z0Of = (key) => (TERRAINS.find(([k]) => k === key) || TERRAINS[0])[2];
 export const gustyOf = (key) => (GUSTS.find(([k]) => k === key) || GUSTS[2])[2];

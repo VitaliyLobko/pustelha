@@ -25,8 +25,8 @@ export function compassRose({ get, set }) {
   }).join('');
   const face = el('span', { class: 'cr-face', 'aria-hidden': 'true' });
   face.innerHTML = `<svg viewBox="0 0 100 100">
-    <circle class="cr-ring" cx="50" cy="50" r="45"/>${ticks}${labels}
-    <g class="cr-needle"><line x1="50" y1="50" x2="50" y2="14"/><path d="M50 6 L55.5 16 L44.5 16 Z"/></g>
+    <circle class="cr-ring" cx="50" cy="50" r="45"/>${ticks}
+    <g class="cr-needle"><line x1="50" y1="50" x2="50" y2="14"/><path d="M50 6 L55.5 16 L44.5 16 Z"/></g>${labels}
     <circle class="cr-hub" cx="50" cy="50" r="13"/><text class="cr-deg" x="50" y="50"></text></svg>`;
   const needle = face.querySelector('.cr-needle');
   const deg = face.querySelector('.cr-deg');
