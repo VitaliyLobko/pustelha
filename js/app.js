@@ -1,4 +1,4 @@
-import { solve, simulate, meanWind, levelWind, scatter, gustStats } from './ballistics.js';
+import { solve, simulate, meanWind, levelWind, scatterSliced, gustStats } from './ballistics.js';
 import { TERRAINS, GUSTS, REFS, z0Of, clockOf, windSpec } from './wind.js';
 import { LEVELS, parseCoords, coarse, posText, fetchForecast, loadFc, saveFc, fcAge, fcSlot } from './forecast.js';
 import { $, el, fmt, num, read, write, arrowHead, clockWord, where } from './ui.js';
@@ -19,6 +19,8 @@ const PRESETS = [
   { id: 'c2', name: 'Умовний кумулятивний 2 кг', mass: 2, diameter: 100, cd: 0.45, type: 'heat', ex: 0.6 },
 ];
 const TABLE_HEIGHTS = [25, 50, 75, 100, 150, 200, 250, 300];
+// Крок розрахунку, с: дрібніший змінює точку падіння менш ніж на 0,2 мм, а рахується вп’ятеро довше — повзунки гальмували
+const CALC_DT = 0.01;
 
 // Умови скиду — спільні з тренажером (cond.js); тут їх задають
 const state = cond;
@@ -371,7 +373,7 @@ function render() {
     return;
   }
   const s = params();
-  const r = solve(s, load);
+  const r = solve(s, load, { dt: CALC_DT });
   const dist = Math.hypot(r.x, r.y);
   const driftLen = Math.hypot(r.drift.x, r.drift.y);
   const hover = !state.speed;
@@ -410,14 +412,14 @@ function render() {
   lines.splice(1, 0, el('li', {}, `Удар — ${fmt(r.impactAngle, 0)}° від вертикалі; гранична швидкість цього вантажу ${fmt(r.vt, 0)} м/с.`));
   out.replaceChildren(
     el('ul', { class: 'explain' }, lines),
-    el('fieldset', { class: 'box' }, el('legend', {}, 'За висотою'), heightTable(load)));
+    el('fieldset', { class: 'box' }, el('legend', {}, 'За висотою'), heightTable()));
   scheduleScatter();
 }
 
 /* Схема згори: центр — точка під дроном, ніс угору; масштаб підбирається під точку падіння */
 let planMap = null;
 function plan(r, w) {
-  const pts = r.path.filter((_, i) => i % 15 === 0).concat([r.path[r.path.length - 1]]);
+  const pts = r.path.filter((_, i) => i % 3 === 0).concat([r.path[r.path.length - 1]]);
   const reach = Math.max(0.5, ...pts.map((p) => Math.hypot(p[0], p[1])));
   const step = niceStep(reach / 3);
   const rings = Math.max(1, Math.ceil(reach / step));
@@ -462,22 +464,12 @@ function niceStep(v) {
   return [1, 2, 5, 10].map((m) => m * p).find((s) => s >= v) || 10 * p;
 }
 
-function heightTable(load) {
+// Таблиця — каркас одразу, числа — після паузи у введенні (fillRow): 18 польотів на кожен кадр гальмували повзунки
+function heightTable() {
   const heights = [...new Set([...TABLE_HEIGHTS, state.height])].sort((a, b) => a - b);
   const moving = state.speed > 0;
-  const rows = heights.map((h) => {
-    const s = params(h);
-    const r = simulate(s, load);
-    const calm = simulate({ ...s, wind: 0, levels: null }, load);
-    return el('tr', { class: h === state.height ? 'cur' : '' },
-      el('td', {}, `${fmt(h, 0)} м`),
-      el('td', {}, fmt(r.time)),
-      moving ? el('td', {}, fmt(calm.x)) : null,
-      el('td', {}, fmt(Math.hypot(r.x - calm.x, r.y - calm.y))),
-      // При зависанні точка падіння = знесення вітром, окрема колонка зайва
-      moving ? el('td', {}, fmt(Math.hypot(r.x, r.y))) : null,
-      el('td', { 'data-h': h }, '…'));
-  });
+  const rows = heights.map((h) => el('tr', { class: h === state.height ? 'cur' : '', 'data-row': h },
+    el('td', {}, `${fmt(h, 0)} м`), ...Array.from({ length: moving ? 5 : 3 }, () => el('td', {}, '…'))));
   return el('table', { class: 'table', id: 'h-table' },
     el('thead', {}, el('tr', {},
       el('th', {}, 'Висота'), el('th', {}, 'Час, с'), moving ? el('th', {}, 'Вперед, м') : null,
@@ -485,27 +477,66 @@ function heightTable(load) {
     el('tbody', {}, rows));
 }
 
-/* --- розкид від поривів: сотня скидів з різними поривами — важко, тож після паузи у введенні --- */
-let scT = 0;
+/** Рядок таблиці за висотою: час, знесення, точка; розкид — окремо, він важчий. */
+function fillRow(tr, load) {
+  const h = +tr.dataset.row;
+  const s = params(h);
+  const r = simulate(s, load, { dt: CALC_DT });
+  const calm = simulate({ ...s, wind: 0, levels: null }, load, { dt: CALC_DT });
+  const moving = state.speed > 0;
+  tr.replaceChildren(
+    el('td', {}, `${fmt(h, 0)} м`),
+    el('td', {}, fmt(r.time)),
+    moving ? el('td', {}, fmt(calm.x)) : null,
+    el('td', {}, fmt(Math.hypot(r.x - calm.x, r.y - calm.y))),
+    // При зависанні точка падіння = знесення вітром, окрема колонка зайва
+    moving ? el('td', {}, fmt(Math.hypot(r.x, r.y))) : null,
+    el('td', { 'data-h': h }, '…'));
+}
+
+/* --- важке (розкид — сотні скидів з поривами, таблиця за висотою) — після паузи у введенні й частинами,
+   щоб між ними екран відповідав на палець; нова зміна умов обриває недорахоане --- */
+let scT = 0, scGen = 0;
 const scCache = new Map();
+const breath = () => new Promise((r) => setTimeout(r));
 function scheduleScatter() {
   clearTimeout(scT);
-  scT = setTimeout(paintScatter, 160);
+  const gen = ++scGen;
+  scT = setTimeout(() => paintLater(gen), 160);
 }
-function scatterOf(s, load, n) {
-  const key = JSON.stringify([s, load.mass, load.diameter, load.cd, n]);
-  if (!scCache.has(key)) {
-    if (scCache.size > 60) scCache.clear();
-    scCache.set(key, scatter(s, load, { n }));
+async function paintLater(gen) {
+  const load = currentLoad();
+  if (!(await paintScatter(gen))) return;
+  for (const tr of document.querySelectorAll('#h-table tr[data-row]')) {
+    await breath();
+    if (gen !== scGen) return;
+    fillRow(tr, load);
   }
-  return scCache.get(key);
+  // Колонка розкиду в таблиці — по 60 скидів на висоту
+  for (const td of document.querySelectorAll('#h-table td[data-h]')) {
+    const r = await scatterOf(params(+td.dataset.h), load, 60, gen);
+    if (!r) return;
+    td.textContent = r.r90 > 0 ? fmt(r.r90) : '—';
+  }
 }
-function paintScatter() {
-  const tile = $('sc-tile');
-  if (!tile) return;
+/** Розкид з кешу або порахований шматками; null — умови змінились, поки рахували. */
+async function scatterOf(s, load, n, gen) {
+  const key = JSON.stringify([s, load.mass, load.diameter, load.cd, n]);
+  if (scCache.has(key)) return scCache.get(key);
+  const sc = await scatterSliced(s, load, { n }, () => gen === scGen);
+  if (!sc) return null;
+  if (scCache.size > 60) scCache.clear();
+  scCache.set(key, sc);
+  return sc;
+}
+/** Плитка, рядок пояснення й хмарка на схемі; false — умови змінились, далі не рахуємо. */
+async function paintScatter(gen) {
+  if (!$('sc-tile')) return false;
   const load = currentLoad();
   const s = params();
-  const sc = scatterOf(s, load, 150);
+  const sc = await scatterOf(s, load, 150, gen);
+  const tile = $('sc-tile');
+  if (!sc || !tile) return false;
   const g = sc.g;
   const line = $('sc-line');
   if (!(sc.r90 > 0)) {
@@ -540,11 +571,7 @@ function paintScatter() {
         el('svg:path', { class: 'sc-90', d: ellipse(2.146) }), el('svg:path', { class: 'sc-50', d: ellipse(1.177) }));
     }
   }
-  // Колонка розкиду в таблиці — по 60 скидів на висоту
-  for (const td of document.querySelectorAll('#h-table td[data-h]')) {
-    const r = scatterOf(params(+td.dataset.h), load, 60);
-    td.textContent = r.r90 > 0 ? fmt(r.r90) : '—';
-  }
+  return true;
 }
 
 /* --- оновлення екрана --- */

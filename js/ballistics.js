@@ -32,19 +32,28 @@ function dragK(m, rho) {
 
 // Логарифмічний профіль приземного шару: U(z) ∝ ln(z / z0); z0 — шорсткість місцевості (поле 0,03 м … ліс 1 м).
 // Нижче 1,5·z0 профіль не опускаємо — там повітря в траві чи кронах майже стоїть
-const logShare = (z, zr, z0) => Math.log(Math.max(z, 1.5 * z0) / z0) / Math.log(Math.max(zr, 1.5 * z0) / z0);
 
 /** Вітер прогнозу на висоті z: {e, n} — куди рухається повітря (схід, північ), м/с. Між рівнями — по ln z, нижче нижнього — лог-профіль. */
-export function levelAir(levels, z, z0 = 0.03) {
-  const v = (l, k = 1) => ({ e: -l.speed * k * Math.sin(l.dir * D2R), n: -l.speed * k * Math.cos(l.dir * D2R) });
-  const L = levels;
-  if (z <= L[0].z) return v(L[0], logShare(z, L[0].z, z0));
-  const i = L.findIndex((l) => l.z > z);
-  if (i < 0) return v(L[L.length - 1]);
-  // Вектори, а не швидкість і кут окремо: так поворот вітру з висотою переходить через північ без стрибка
-  const a = v(L[i - 1]), b = v(L[i]);
-  const f = Math.log(z / L[i - 1].z) / Math.log(L[i].z / L[i - 1].z);
-  return { e: a.e + (b.e - a.e) * f, n: a.n + (b.n - a.n) * f };
+export const levelAir = (levels, z, z0 = 0.03) => airProfile(levels, z0)(z);
+
+/** Те саме, що levelAir, як функція z → {e, n}: тригонометрія й знаменники — раз, а не на кожному кроці польоту. */
+function airProfile(L, z0 = 0.03) {
+  const ns = L.map((l) => -l.speed), sn = L.map((l) => Math.sin(l.dir * D2R)), cs = L.map((l) => Math.cos(l.dir * D2R));
+  const v = (i, k = 1) => ({ e: ns[i] * k * sn[i], n: ns[i] * k * cs[i] });
+  const vs = L.map((_, i) => v(i));
+  const lo = 1.5 * z0, den0 = Math.log(Math.max(L[0].z, lo) / z0);
+  const seg = L.map((l, i) => (i ? Math.log(l.z / L[i - 1].z) : 0));
+  const last = L.length - 1;
+  return (z) => {
+    if (z <= L[0].z) return v(0, Math.log(Math.max(z, lo) / z0) / den0);
+    let i = 1;
+    while (i <= last && !(L[i].z > z)) i++;
+    if (i > last) return vs[last];
+    // Вектори, а не швидкість і кут окремо: так поворот вітру з висотою переходить через північ без стрибка
+    const a = vs[i - 1], b = vs[i];
+    const f = Math.log(z / L[i - 1].z) / seg[i];
+    return { e: a.e + (b.e - a.e) * f, n: a.n + (b.n - a.n) * f };
+  };
 }
 
 /** Швидкість і напрям «звідки» (°) вітру прогнозу на висоті z. */
@@ -62,15 +71,18 @@ export function levelWind(levels, z, z0) {
 export function meanWind(s) {
   if (s.levels?.length) {
     const h = (s.heading || 0) * D2R, k = s.scale > 0 ? s.scale : 1, z0 = s.z0 > 0 ? s.z0 : 0.03;
+    const air = airProfile(s.levels, z0);
     return (z) => {
-      const a = levelAir(s.levels, z, z0);
+      const a = air(z);
       return { x: k * (a.e * Math.sin(h) + a.n * Math.cos(h)), y: k * (a.e * Math.cos(h) - a.n * Math.sin(h)) };
     };
   }
   const air = windVector(s.wind || 0, s.clock ?? 12);
   if (!(s.z0 > 0)) return () => air;
   const zr = s.refHeight ?? s.height, zp = s.zp > 0 ? s.zp : s.z0;
-  return (z) => { const f = logShare(z, zr, zp); return { x: air.x * f, y: air.y * f }; };
+  // Лог-профіль; знаменник — раз: функцію кличуть на кожному кроці польоту
+  const lo = 1.5 * zp, den = Math.log(Math.max(zr, lo) / zp);
+  return (z) => { const f = Math.log(Math.max(z, lo) / zp) / den; return { x: air.x * f, y: air.y * f }; };
 }
 
 /* --- пориви --- */
@@ -160,7 +172,8 @@ export function simulate(s, m, { dt = 0.002, track = false, gust = null } = {}) 
   const m0 = mean(H), m0s = Math.hypot(m0.x, m0.y);
   const ax = m0s > 1e-6 ? m0.x / m0s : 1, ay = m0s > 1e-6 ? m0.y / m0s : 0;
 
-  const deriv = (st, t) => {
+  // Похідна й проміжні стани — у тих самих масивах: кроків на скид тисячі, нові масиви на кожному душили збирач сміття
+  const deriv = (st, t, out) => {
     const a = mean(Math.max(st[2], 0));
     let wx = a.x, wy = a.y, wz = 0;
     if (gust) {
@@ -171,28 +184,35 @@ export function simulate(s, m, { dt = 0.002, track = false, gust = null } = {}) 
     }
     const rx = st[3] - wx, ry = st[4] - wy, rz = st[5] - wz;
     const kv = k * Math.hypot(rx, ry, rz);
-    return [st[3], st[4], st[5], -kv * rx, -kv * ry, -G - kv * rz];
+    out[0] = st[3]; out[1] = st[4]; out[2] = st[5];
+    out[3] = -kv * rx; out[4] = -kv * ry; out[5] = -G - kv * rz;
   };
-  const add = (a, b, h) => a.map((v, i) => v + b[i] * h);
+  const add = (a, b, h, out) => {
+    for (let i = 0; i < 6; i++) out[i] = a[i] + b[i] * h;
+    return out;
+  };
+  const k1 = new Float64Array(6), k2 = new Float64Array(6), k3 = new Float64Array(6), k4 = new Float64Array(6);
+  const mid = new Float64Array(6);
 
   // Затримка механізму скиду: дрон за цей час пролітає вперед
-  let st = [(s.speed || 0) * (s.delay || 0), 0, H, s.speed || 0, 0, 0];
+  let st = Float64Array.of((s.speed || 0) * (s.delay || 0), 0, H, s.speed || 0, 0, 0);
+  let next = new Float64Array(6);
   let t = 0;
   const path = track ? [[st[0], st[1], st[2], 0]] : null;
   while (st[2] > 0 && t < 600) {
-    const k1 = deriv(st, t);
-    const k2 = deriv(add(st, k1, dt / 2), t + dt / 2);
-    const k3 = deriv(add(st, k2, dt / 2), t + dt / 2);
-    const k4 = deriv(add(st, k3, dt), t + dt);
-    const next = st.map((v, i) => v + dt / 6 * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i]));
+    deriv(st, t, k1);
+    deriv(add(st, k1, dt / 2, mid), t + dt / 2, k2);
+    deriv(add(st, k2, dt / 2, mid), t + dt / 2, k3);
+    deriv(add(st, k3, dt, mid), t + dt, k4);
+    for (let i = 0; i < 6; i++) next[i] = st[i] + dt / 6 * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i]);
     if (next[2] <= 0) {
       // Точка торкання — лінійно між кроками
       const q = st[2] / (st[2] - next[2]);
-      st = st.map((v, i) => v + (next[i] - v) * q);
+      for (let i = 0; i < 6; i++) st[i] += (next[i] - st[i]) * q;
       t += dt * q;
       st[2] = 0;
     } else {
-      st = next;
+      [st, next] = [next, st];
       t += dt;
     }
     if (track) path.push([st[0], st[1], st[2], t]);
@@ -226,13 +246,40 @@ export function solve(s, m, opts) {
  * Розкид від поривів: n скидів з різними поривами (з однаковим seed — ті самі числа щоразу).
  * Повертає середню точку, радіуси кіл, у які падає 50 % і 90 % скидів, і еліпс розкиду (півосі 1σ, кут від осі x).
  */
-export function scatter(s, m, { n = 100, seed = 7, dt = 0.01 } = {}) {
+export function scatter(s, m, opts) {
+  const job = scatterSteps(s, m, opts);
+  let r = job.next();
+  while (!r.done) r = job.next();
+  return r.value;
+}
+
+/**
+ * Те саме, що scatter, шматками по ≈ 8 мс з паузами, щоб екран відповідав на палець.
+ * alive() — чи ще потрібно (умови могли змінитись); якщо ні — null.
+ */
+export async function scatterSliced(s, m, opts, alive) {
+  const job = scatterSteps(s, m, opts);
+  let t0 = performance.now(), r = job.next();
+  while (!r.done) {
+    if (performance.now() - t0 > 8) {
+      await new Promise((ok) => setTimeout(ok));
+      if (!alive()) return null;
+      t0 = performance.now();
+    }
+    r = job.next();
+  }
+  return r.value;
+}
+
+/** Те саме, що scatter, по одному скиду за next(). */
+function* scatterSteps(s, m, { n = 100, seed = 7, dt = 0.01 } = {}) {
   const g = gustStats(s);
   const base = simulate(s, m, { dt });
   if (!(g.su > 0.01)) return { g, mx: base.x, my: base.y, r50: 0, r90: 0, ell: { a: 0, b: 0, ang: 0 }, pts: [] };
   const rnd = mulberry32(seed);
   const pts = [];
   for (let i = 0; i < n; i++) {
+    yield;
     const r = simulate(s, m, { dt, gust: gustSeries(g, rnd, base.time * 1.5 + 2) });
     pts.push([r.x, r.y]);
   }

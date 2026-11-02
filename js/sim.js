@@ -1,5 +1,5 @@
 // Тренажер скиду: вид з камери вниз, приціл — точка під дроном, тягнеться пальцем; цілі поки квадратами.
-import { simulate, gustStats, gustSeries, gustStep, gustStart, CALM_GUST, gaussian, meanWind, scatter } from './ballistics.js';
+import { simulate, gustStats, gustSeries, gustStep, gustStart, CALM_GUST, gaussian, meanWind, scatterSliced } from './ballistics.js';
 import { loadFc } from './forecast.js';
 import { $, el, fmt, read, write, vibrate, where, wheelStrip } from './ui.js';
 import { RENEW_MODES, RENEW_NOTE, renewPref, setRenew } from './settings.js';
@@ -955,6 +955,25 @@ export function initSim({ loads, loadById, openCalc }) {
     type: 'button', 'data-v': String(m.v), onclick: () => { state.move = m.v; changed(); },
   }, m.name))));
 
+  // Пляма розкиду в підказці — 60 скидів з поривами: після паузи й частинами, щоб тягнення не гальмувало; пораховане — пам'ятаємо
+  const hintCache = new Map();
+  let hintT = 0, hintGen = 0;
+  function hintLater(s, load) {
+    clearTimeout(hintT);
+    const gen = ++hintGen;
+    const key = s && JSON.stringify([s, load.mass, load.diameter, load.cd]);
+    hintSc = s ? hintCache.get(key) ?? null : null;
+    if (!s || hintSc) return;
+    hintT = setTimeout(async () => {
+      const sc = await scatterSliced(s, load, { n: 60, seed: 3 }, () => gen === hintGen);
+      if (!sc) return;
+      if (hintCache.size > 30) hintCache.clear();
+      hintCache.set(key, hintSc = sc);
+      paintOut();
+      if (!loop) draw();
+    }, 160);
+  }
+
   /** Середній вітер на висоті дрона, сила поривів, підказка з розкидом — після будь-якої зміни вітру, висоти чи вантажу. */
   function refreshWind() {
     const s = params();
@@ -968,7 +987,7 @@ export function initSim({ loads, loadById, openCalc }) {
     hint = { x: r.x, y: r.y };
     // Час падіння — з тієї ж моделі, що й підказка; затримку скиду показуємо окремо, бо вона до падіння
     $('sim-fall-v').textContent = `${fmt(r.time)}${cond.delay ? `+${fmt(cond.delay, 2)}` : ''} с`;
-    hintSc = state.hint && gst.su > 0.01 ? scatter(s, load, { n: 60, seed: 3 }) : null;
+    hintLater(state.hint && gst.su > 0.01 ? s : null, load);
     paintOsd();
   }
 
