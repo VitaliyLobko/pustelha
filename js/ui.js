@@ -3,6 +3,8 @@
 const SVG = 'http://www.w3.org/2000/svg';
 
 export const $ = (id) => document.getElementById(id);
+/** Плавна прокрутка — лише коли в системі не просили менше руху. */
+export const scrollMode = () => (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
 
 /** Елемент з атрибутами й дітьми; 'svg:тег' — у просторі імен SVG, on… — слухачі. */
 export function el(tag, attrs = {}, ...children) {
@@ -80,7 +82,7 @@ export function wheelStrip(strip, onFocus, item = '.tgt-opt') {
   strip.addEventListener('scroll', () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(focusMid); }, { passive: true });
   let wheelTo = null;
   const centerOn = (b) => strip.scrollTo({ left: b.offsetLeft + b.offsetWidth / 2 - strip.clientWidth / 2,
-    behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    behavior: scrollMode() });
   strip.addEventListener('wheel', (e) => {
     const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
     if (!d) return;

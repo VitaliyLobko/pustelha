@@ -33,7 +33,7 @@ const cellText = (c) => `${c.lat.toFixed(1)}, ${c.lon.toFixed(1)} — кліти
 export async function openMap({ start, onPick }) {
   let pick = start ? coarse(start) : null;
   const box = el('div', { class: 'map-box' });
-  const q = el('input', { type: 'search', class: 'map-q', placeholder: 'Місто чи село', autocomplete: 'off', spellcheck: 'false', enterkeyhint: 'search' });
+  const q = el('input', { type: 'search', class: 'map-q', placeholder: 'Місто чи село', 'aria-label': 'Пошук населеного пункту', autocomplete: 'off', spellcheck: 'false', enterkeyhint: 'search' });
   const list = el('ul', { class: 'place-list map-list', hidden: true });
   const cap = el('p', { class: 'map-cap' }, pick ? cellText(pick) : HINT);
   const take = el('button', { type: 'button', class: 'btn primary', disabled: !pick }, 'Прогноз тут');

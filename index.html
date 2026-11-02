@@ -85,7 +85,7 @@
           <button type="button" id="sim-load" class="sim-load" data-key="load" data-panel="sim-ldp" aria-expanded="false" title="Вантаж"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.7 7.6 15.8 4.4V2.6H8.2v1.8l3.1 3.2z"/><path d="M12.9 6.6 14.9 10v7.3c0 2.7-1.3 5-2.9 5s-2.9-2.3-2.9-5V10l2-3.4z"/></svg><span id="sim-load-v"></span><svg class="sim-more-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg></button>
           <span class="sim-split">
             <button type="button" class="sim-icon" id="sim-new" title="Нова ситуація" aria-label="Нова ситуація"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg></button>
-            <button type="button" class="sim-icon sim-more" id="sim-new-mode" aria-expanded="false" aria-controls="sim-renew"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg></button>
+            <button type="button" class="sim-icon sim-more" id="sim-new-mode" title="Що міняти в новій ситуації" aria-label="Що міняти в новій ситуації" aria-expanded="false" aria-controls="sim-renew"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg></button>
           </span>
         </div>
         <div class="sim-panel" id="sim-renew" hidden></div>
@@ -137,11 +137,11 @@
       <div class="sim-panel calc-panel" id="cp-drop" hidden>
       <div class="field" data-key="height" data-min="10" data-max="300" data-step="5">
         <label for="f-height">Висота над ціллю, м</label>
-        <div class="pair"><input type="range" id="r-height"><input type="number" id="f-height" inputmode="decimal"></div>
+        <div class="pair"><input type="range" id="r-height" aria-label="Висота над ціллю, м"><input type="number" id="f-height" inputmode="decimal"></div>
       </div>
       <div class="field" data-key="speed" data-min="0" data-max="25" data-step="0.5">
         <label for="f-speed">Швидкість дрона, м/с <span class="hint" id="speed-hint"></span></label>
-        <div class="pair"><input type="range" id="r-speed"><input type="number" id="f-speed" inputmode="decimal"></div>
+        <div class="pair"><input type="range" id="r-speed" aria-label="Швидкість дрона, м/с"><input type="number" id="f-speed" inputmode="decimal"></div>
       </div>
       </div>
       <div class="sim-panel calc-panel" id="cp-wind" hidden>
@@ -184,7 +184,7 @@
       <div class="seg" id="w-gust"></div>
       </div>
       <div class="sim-panel calc-panel" id="cp-load" hidden>
-      <select id="load"></select>
+      <select id="load" aria-label="Вантаж"></select>
       <div class="load-grid">
         <label class="field"><span>Маса, кг</span><input type="number" id="l-mass" inputmode="decimal" step="0.05" min="0"></label>
         <label class="field"><span>Діаметр, мм</span><input type="number" id="l-diameter" inputmode="decimal" step="1" min="0"></label>
@@ -200,7 +200,7 @@
       <div class="actions" id="load-actions"></div>
       <div class="field load-common" data-key="delay" data-min="0" data-max="1" data-step="0.05">
         <label for="f-delay">Затримка скиду, с <span class="hint">— одна на всі вантажі: від натискання до відпускання; і в тренажері</span></label>
-        <div class="pair"><input type="range" id="r-delay"><input type="number" id="f-delay" inputmode="decimal"></div>
+        <div class="pair"><input type="range" id="r-delay" aria-label="Затримка скиду, с"><input type="number" id="f-delay" inputmode="decimal"></div>
       </div>
       </div>
       <div class="sim-panel calc-panel" id="cp-air" hidden>

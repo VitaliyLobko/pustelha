@@ -38,7 +38,7 @@
   --accent-2: #1d529c;
   --good: #1a7a4b;
   --bad: #c2462d;
-  --warn: #a87a0c;
+  --warn: #7d5a06;
   --c-hit: #c2462d;
   --c-wind: #2563b8;
   --c-carry: #a87a0c;
@@ -54,7 +54,7 @@
   --line: #3a0b08;
   --line-soft: #250605;
   --text: #e0412f;
-  --muted: #9a2a1e;
+  --muted: #c83826;
   --accent: #8f1d12;
   --accent-2: #ff5a44;
   --good: #e0412f;
@@ -72,7 +72,9 @@
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%;
+  /* Поле у фокусі не ховається під липкий блок угорі й нижню панель (--stick-h ставить app.js) */
+  scroll-padding: calc(env(safe-area-inset-top) + var(--stick-h, 0px)) 0 calc(var(--tabs-h) + env(safe-area-inset-bottom) + 8px); }
 body {
   margin: 0;
   min-height: 100vh;
@@ -130,7 +132,9 @@ button, input, select { font: inherit; color: inherit; }
 .update[hidden] { display: none; }
 
 /* Шапки немає — увесь екран під кадр; зверху лише відступ під виріз камери телефона */
-.view { padding: env(safe-area-inset-top) 16px 14px; max-width: 720px; margin: 0 auto; }
+/* Телефон боком: виріз екрана збоку — відступ не менший за нього */
+.view { padding: env(safe-area-inset-top) max(16px, env(safe-area-inset-right)) 14px max(16px, env(safe-area-inset-left));
+  max-width: 720px; margin: 0 auto; }
 
 /* --- рамки з заголовком на лінії --- */
 .box { min-width: 0; margin: 16px 0 12px; padding: 4px 12px 12px; border: 1px solid var(--line); border-radius: 12px; }
@@ -153,7 +157,8 @@ details.box[open] > summary { margin-bottom: 8px; }
 .label { margin: 10px 0 4px; }
 .hint { color: var(--muted); font-size: 12px; }
 .pair { display: grid; grid-template-columns: 1fr 84px; align-items: center; gap: 12px; }
-input[type=range] { width: 100%; margin: 0; accent-color: var(--accent); }
+/* Вища зона дотику: смуга й повзунок ті самі, але влучити пальцем легше */
+input[type=range] { width: 100%; height: 44px; margin: 0; accent-color: var(--accent); }
 input[type=number], input[type=text], select {
   width: 100%;
   min-height: 44px;
@@ -165,6 +170,9 @@ input[type=number], input[type=text], select {
 }
 .pair input[type=number] { text-align: center; font-weight: 700; }
 input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Нічний акцент на чорному ледь видно (2,3:1) — рамка фокуса яскравіша */
+:root[data-theme="night"] :is(:focus-visible, input:focus, select:focus) { outline-color: var(--accent-2); }
 input.invalid { border-color: var(--bad); }
 input[readonly] { color: var(--muted); background: transparent; }
 .load-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 10px; }
@@ -181,7 +189,7 @@ input[readonly] { color: var(--muted); background: transparent; }
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 40px;
+  min-height: 44px;
   padding: 8px 14px;
   border-radius: 12px;
   border: 1px solid var(--line);
@@ -196,7 +204,7 @@ input[readonly] { color: var(--muted); background: transparent; }
 
 /* перемикач з двох-трьох варіантів */
 .seg { display: flex; padding: 3px; gap: 3px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); }
-.seg button { flex: 1; min-height: 38px; padding: 6px 8px; border: 0; border-radius: 9px; background: none; cursor: pointer; font-size: 14px; }
+.seg button { flex: 1; min-height: 44px; padding: 6px 8px; border: 0; border-radius: 9px; background: none; cursor: pointer; font-size: 14px; }
 /* Темніший за акцент: білий текст тримає контраст і в темній темі */
 .seg button.on { background: color-mix(in srgb, var(--accent) 80%, #000); color: #fff; font-weight: 650; }
 
@@ -236,7 +244,10 @@ input[readonly] { color: var(--muted); background: transparent; }
 /* Налаштування: шестерня провертається на чверть оберту з доводкою */
 .tabs .play[data-tab="set"] .cog { animation: tab-cog .9s ease-out; }
 @keyframes tab-cog { 0% { transform: none; } 60% { transform: rotate(100deg); } 80% { transform: rotate(84deg); } 100% { transform: rotate(90deg); } }
-@media (prefers-reduced-motion: reduce) { .tabs .play :is(g, path, circle) { animation: none !important; } }
+@media (prefers-reduced-motion: reduce) {
+  .tabs .play :is(g, path, circle), .drop-btn.fire { animation: none !important; }
+  *, ::before, ::after { transition-duration: 0s !important; scroll-behavior: auto !important; }
+}
 
 /* --- вітер: годинник з Shooter's Log — тап по годині, тягни від центру — сила --- */
 .wind-pick { position: relative; width: min(230px, 100%); aspect-ratio: 1; margin: 4px auto; }
@@ -245,13 +256,14 @@ input[readonly] { color: var(--muted); background: transparent; }
 .wp-ring { fill: var(--surface); stroke: var(--text); stroke-opacity: .55; stroke-width: .7; }
 .wp-aim { stroke: var(--muted); stroke-width: .7; stroke-dasharray: 2 1.6; }
 .wp-aim-head { fill: var(--muted); }
-.wind-pick .wp-text { fill: var(--muted); font-size: 5px; }
+.wind-pick .wp-text { fill: var(--muted); font-size: 5.3px; }
 .wp-drone { fill: none; stroke: var(--text); stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round; }
 .wp-drone .wp-nose { fill: var(--accent-2); stroke: none; }
 .wp-wind line { stroke: var(--accent-2); stroke-width: 1.6; stroke-linecap: round; }
 .wp-wind path { fill: var(--accent); }
-.wind-pick button { position: absolute; left: calc(50% + var(--x) * 46% - 17px); top: calc(50% + var(--y) * 46% - 17px);
-  width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%; background: transparent;
+.wind-pick { container-type: inline-size; }
+.wind-pick button { --b: min(44px, 23cqw); position: absolute; left: calc(50% + var(--x) * 46% - var(--b) / 2);
+  top: calc(50% + var(--y) * 46% - var(--b) / 2); width: var(--b); height: var(--b); padding: 0; border: 0; border-radius: 50%; background: transparent;
   color: var(--text); font: inherit; font-size: 14px; font-weight: 800; cursor: pointer; }
 .wind-pick button.on { background: color-mix(in srgb, var(--accent) 80%, #000); color: #fff; }
 .wind-pick button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -259,9 +271,11 @@ input[readonly] { color: var(--muted); background: transparent; }
 .wp-pad { position: absolute; inset: 13%; border-radius: 50%; touch-action: none; cursor: grab; }
 .wp-pad:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .wp-scale { fill: none; stroke: var(--muted); stroke-opacity: .35; stroke-width: .5; stroke-dasharray: 1.5 2; }
-.wind-pick .wp-scale-text { font-size: 4px; }
+.wind-pick .wp-scale-text { font-size: 5.3px; }
 .wp-knob { fill: color-mix(in srgb, var(--accent) 80%, #000); }
 .wind-pick .wp-knob-text { fill: #fff; font-size: 5.5px; font-weight: 800; }
+/* Циферблат у viewBox 100: на вузькому (iPhone SE) підписи в його одиницях більші, щоб на екрані було від 12 px */
+@container (max-width: 200px) { .wind-pick :is(.wp-text, .wp-scale-text, .wp-knob-text) { font-size: 6.9px; } }
 .wp-note { margin: 0 0 2px; font-size: 15px; font-weight: 700; }
 .wp-more { margin: 0; font-size: 13px; color: var(--muted); }
 /* Опис над годинником, кнопки сили — стовпчиком збоку */
@@ -270,10 +284,10 @@ input[readonly] { color: var(--muted); background: transparent; }
 .wind-pick-wrap .wp-more { grid-area: more; }
 .wind-pick-wrap .wind-pick { grid-area: dial; }
 .wp-quick { grid-area: quick; display: grid; gap: 4px; align-self: center; }
-.wp-quick button { display: grid; grid-template-columns: 22px auto; align-items: center; gap: 4px; min-height: 40px; padding: 2px 10px;
+.wp-quick button { display: grid; grid-template-columns: 22px auto; align-items: center; gap: 4px; min-height: 44px; padding: 2px 10px;
   border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); cursor: pointer; text-align: left; }
 .wp-quick b { font: 700 15px var(--mono); }
-.wp-quick small { font-size: 11px; color: var(--muted); }
+.wp-quick small { font-size: 12px; color: var(--muted); }
 .wp-quick button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
 .calc-wind { margin-top: 6px; }
 /* Курс — числом і сторонами світу; година прогнозу — рядком кнопок */
@@ -298,7 +312,7 @@ input[readonly] { color: var(--muted); background: transparent; }
 .cr-note { margin: 0; font-size: 14px; color: var(--muted); }
 .meas-field { margin-top: 12px; }
 .fc-hours { margin-bottom: 4px; }
-.fc-hours button { min-height: 34px; padding: 4px 10px; font: 600 13px var(--mono); }
+.fc-hours button { min-height: 44px; padding: 4px 10px; font: 600 13px var(--mono); }
 
 /* --- тренажер: кадр з камери, кнопки в кутах, під ним — налаштування й показання (розкладка з Shooter's Log) --- */
 .sim { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
@@ -317,7 +331,7 @@ input[readonly] { color: var(--muted); background: transparent; }
   background-position: top left, top left, top right, top right, bottom left, bottom left, bottom right, bottom right; }
 /* Ніс дрона — посередині верхнього краю: усі напрямки («ліворуч», «з 3 год») — від нього */
 .sim-nose { position: absolute; left: 50%; top: 2px; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 1px;
-  transform: translateX(-50%); pointer-events: none; color: #fff; opacity: .85; font: 650 10px/1 var(--mono);
+  transform: translateX(-50%); pointer-events: none; color: #fff; opacity: .85; font: 650 12px/1 var(--mono);
   text-shadow: 0 1px 2px rgb(0 0 0 / .7); }
 .sim-nose svg { width: 12px; height: 7px; fill: currentColor; filter: drop-shadow(0 1px 1px rgb(0 0 0 / .6)); }
 /* Кнопки на кадрі — один стиль: однакова висота, напівпрозоре тло без розмиття (розмиття гальмувало б, коли тягнеш приціл) */
@@ -334,13 +348,23 @@ input[readonly] { color: var(--muted); background: transparent; }
 .sim-wind-osd.gust { box-shadow: inset 0 0 0 1.5px #ffb347; }
 .sim-wind-osd.gust b { color: #ffb347; }
 .sim-wind-osd.lull b { color: #9fb3c8; }
-.sim-frame > .sim-corner { right: var(--ov-gap); top: var(--ov-gap); display: flex; border-radius: calc(var(--ov) / 2); overflow: hidden; }
+.sim-frame > .sim-corner { right: var(--ov-gap); top: var(--ov-gap); display: flex; border-radius: calc(var(--ov) / 2); }
+.sim-frame > :is(.hint-btn, .sim-badge, .sim-ret)::after, .sim-zoom::after { content: ''; position: absolute; inset: -5px; }
+.sim-zoom { position: relative; }
+.sim-zoom::after { inset: -6px 0; }
 /* «Ціль n/5» і зум — одна плашка з розділювачем, як «Боєць 1/5 | лупа» в Shooter's Log */
 .sim-zoom { display: flex; align-items: center; gap: 4px; height: 100%; padding: 0 11px; border: 0; background: none; color: inherit;
   font: 650 13px var(--mono); cursor: pointer; }
 .sim-zoom + .sim-zoom { border-left: 1px solid rgb(255 255 255 / .16); }
 .sim-zoom[aria-expanded="true"] { color: #79aaf0; }
 .sim-zoom svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+/* Вузький кадр (iPhone SE): верхні плашки щільніші, щоб вітер не залазив під масштаб */
+.sim-frame { container-type: inline-size; }
+@container (max-width: 300px) {
+  .sim-wind-osd { gap: 2px; padding: 0 7px 0 4px; font-size: 12px; }
+  .sim-wind-osd svg { width: 16px; height: 16px; }
+  .sim-zoom { gap: 2px; padding: 0 7px; }
+}
 .sim-frame > .sim-ret { right: var(--ov-gap); top: calc(var(--ov-gap) * 2 + var(--ov)); width: var(--ov); padding: 0; border-radius: 50%;
   display: grid; place-items: center; cursor: pointer; }
 .sim-ret svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; }
@@ -404,7 +428,7 @@ input[readonly] { color: var(--muted); background: transparent; }
 /* Підказка, вантаж, нова ситуація — один рядок */
 .sim-line { display: flex; gap: 8px; align-items: center; }
 /* Вантаж: тап — стрічка під рядком, свайп — наступний */
-.sim-load { flex: 1; min-width: 0; min-height: 40px; display: flex; align-items: center; gap: 6px; padding: 6px 8px 6px 10px;
+.sim-load { flex: 1; min-width: 0; min-height: 44px; display: flex; align-items: center; gap: 6px; padding: 6px 8px 6px 10px;
   border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); color: inherit; font: inherit; font-weight: 650;
   text-align: left; cursor: pointer; touch-action: pan-y; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .sim-load > svg:first-child { flex: none; width: 20px; height: 20px; fill: currentColor; opacity: .7; }
@@ -415,17 +439,25 @@ input[readonly] { color: var(--muted); background: transparent; }
 .sim-load[aria-expanded="true"] .sim-more-ico { transform: rotate(180deg); }
 .ld-sym { width: 26px; height: 26px; fill: currentColor; opacity: .75; }
 .link-btn { margin-top: 4px; padding: 6px 2px; border: 0; background: none; color: var(--accent-2); font: 600 13px system-ui, sans-serif; cursor: pointer; }
-.sim-icon { flex: none; display: grid; place-items: center; width: 44px; height: 40px; padding: 0; border: 1px solid var(--line); border-radius: 12px;
+.sim-icon { flex: none; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid var(--line); border-radius: 12px;
   background: var(--surface-2); cursor: pointer; }
 .sim-icon svg, .sim-tool svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .sim-icon[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-2); }
 /* Ціль, вітер, рух — три кнопки зі значенням; налаштування — в панелі під рядком */
 .sim-tools { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; }
 .sim-tool { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 7px; align-items: center; justify-items: start;
-  min-width: 0; padding: 6px 13px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); text-align: left; cursor: pointer;
+  min-width: 0; min-height: 44px; padding: 6px 13px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); text-align: left; cursor: pointer;
   touch-action: pan-y; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .sim-tool > svg, .sim-tool > .tgt-ico { grid-row: span 2; }
-.sim-tool-t { font-size: 11px; line-height: 1.2; color: var(--muted); }
+/* Вузький екран (iPhone SE): щільніша кнопка, щоб значення («Піхота», «6,8 м/с») не обрізалось */
+@media (max-width: 359px) {
+  .sim-tool { column-gap: 3px; padding: 6px 6px; }
+  .sim-load > svg:first-child { display: none; }
+  .sim-tool > svg, .sim-tool .tgt-sym { width: 20px; height: 20px; }
+  .sim-tool.swipe::before { left: 1px; }
+  .sim-tool.swipe::after { right: 1px; }
+}
+.sim-tool-t { font-size: 12px; line-height: 1.2; color: var(--muted); }
 .sim-tool-v { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 12px var(--mono); letter-spacing: -0.04em; }
 .sim-tool.swipe::before, .sim-tool.swipe::after { position: absolute; top: 50%; transform: translateY(-55%); font: 600 15px system-ui, sans-serif;
   color: var(--muted); opacity: .6; pointer-events: none; }
@@ -437,7 +469,7 @@ input[readonly] { color: var(--muted); background: transparent; }
 /* ⟳ і ▾ — одна кнопка з двох половин */
 .sim-split { flex: none; display: flex; }
 .sim-split > .sim-icon:first-child { border-radius: 12px 0 0 12px; }
-.sim-split > .sim-more { width: 28px; margin-left: -1px; border-radius: 0 12px 12px 0; }
+.sim-split > .sim-more { width: 36px; margin-left: -1px; border-radius: 0 12px 12px 0; }
 .sim-split > .sim-more svg { width: 18px; height: 18px; transition: transform .15s; }
 .sim-more[aria-expanded="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-2); }
 .sim-more[aria-expanded="true"] svg { transform: rotate(180deg); }
@@ -445,7 +477,7 @@ input[readonly] { color: var(--muted); background: transparent; }
 .sim-panel { min-width: 0; padding: 10px; border: 1px solid var(--accent); border-radius: 12px; background: var(--surface-2); }
 .sim-panel[hidden] { display: none; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.chips button { min-height: 38px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); cursor: pointer; font-size: 14px; }
+.chips button { min-height: 44px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); cursor: pointer; font-size: 14px; }
 .chips button.on { background: color-mix(in srgb, var(--accent) 80%, #000); border-color: transparent; color: #fff; font-weight: 650; }
 
 .drop-btn { min-height: 52px; border: 0; border-radius: 14px; background: linear-gradient(180deg, var(--accent-2), var(--accent)); color: #fff;
@@ -480,25 +512,37 @@ input[readonly] { color: var(--muted); background: transparent; }
   box-shadow: 0 -10px 0 2px var(--bg); }
 .calc-top > .error { grid-column: 1 / -1; margin: 4px; }
 /* «i» — у куті схеми, як на кадрі тренажера; легенда — під блоком, щоб липкий блок не ріс */
+.calc-top > .hint-btn::after { content: ''; position: absolute; inset: -7px; }
 .calc-top > .hint-btn { position: absolute; left: 8px; top: 8px; width: 30px; height: 30px; border: 1px solid var(--line);
   background: var(--surface-2); color: var(--muted); }
 .calc-top > .hint-btn[aria-expanded="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-2); }
 .calc-help { margin-top: 10px; }
 .plan.lg-plan { width: 34px; height: 30px; aspect-ratio: auto; margin: 0; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); overflow: hidden; }
 .calc-top .plan { max-width: 420px; }
+/* Низький екран (телефон боком): липкий блок був би вищий за екран і закрив би все — тут він прокручується
+   разом зі сторінкою, а схема не вища за екран */
+@media (max-height: 520px) {
+  /* relative, не static: кнопка «i» прив'язана до блока */
+  .calc-top, .sim-frame { position: relative; }
+  .calc-top .plan { max-width: min(420px, calc(100dvh - 110px)); }
+}
 /* Схема в блоці дрібна — підписи більші, щоб читались */
-.calc-top .plan .ring-label { font-size: 17px; }
-.calc-top .plan :is(.nadir-label, .nose-label) { font-size: 17px; }
-.calc-top .plan .hit-label { font-size: 22px; }
-.calc-top .plan .wind-label { font-size: 19px; }
+.calc-top .plan { --pf: 1.02; }
+@media (max-width: 411px) { .calc-top .plan { --pf: 1.1; } }
+@media (max-width: 380px) { .calc-top .plan { --pf: 1.22; } }
+@media (max-width: 350px) { .calc-top .plan { --pf: 1.36; } }
+.calc-top .plan .ring-label { font-size: calc(17px * var(--pf)); }
+.calc-top .plan :is(.nadir-label, .nose-label) { font-size: calc(17px * var(--pf)); }
+.calc-top .plan .hit-label { font-size: calc(22px * var(--pf)); }
+.calc-top .plan .wind-label { font-size: calc(19px * var(--pf)); }
 .stats.mini { grid-template-columns: minmax(0, 1fr); gap: 5px; margin: 0; }
 .stats.mini .stat { padding: 5px 8px; border-radius: 10px; }
 /* Куди саме впаде — головне, тож рядок переноситься, а не обрізається */
 .stats.mini :is(.stat.hit, #sc-tile) .stat-sub { white-space: normal; }
-.stats.mini .stat-label { font-size: 11px; }
+.stats.mini .stat-label { font-size: 12px; }
 .stats.mini .stat-value { margin-top: 0; font-size: 17px; line-height: 1.15; }
 .stats.mini .stat-value small { font-size: 12px; }
-.stats.mini .stat-sub { margin-top: 0; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stats.mini .stat-sub { margin-top: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Висота й вітер і так на кнопках під блоком — підписи лишаємо лише там, де вони нові */
 .stats.mini .stat:not(.hit, #sc-tile) .stat-sub { display: none; }
 .calc-tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 12px; }
@@ -574,7 +618,7 @@ input[readonly] { color: var(--muted); background: transparent; }
 .plan-compass .pc-n { fill: var(--bad); }
 .plan-compass .pc-s { fill: var(--muted); opacity: .6; }
 .plan .pc-label { fill: var(--bad); font-size: 13px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
-.calc-top .plan .pc-label { font-size: 17px; }
+.calc-top .plan .pc-label { font-size: calc(17px * var(--pf)); }
 .plan .track { fill: none; stroke: var(--c-carry); stroke-width: 1.6; stroke-dasharray: 4 3; }
 .plan .hit { fill: var(--c-hit); }
 .plan .hit-ring { fill: none; stroke: var(--c-hit); stroke-width: 1.5; }

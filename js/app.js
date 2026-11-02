@@ -1,7 +1,7 @@
 import { solve, simulate, meanWind, levelWind, scatterSliced, gustStats } from './ballistics.js';
 import { TERRAINS, GUSTS, GUSTS_FC, REFS, z0Of, clockOf, windSpec } from './wind.js';
 import { LEVELS, parseCoords, coarse, posText, fetchForecast, loadFc, saveFc, fcAge, fcSlot } from './forecast.js';
-import { $, el, fmt, num, read, write, arrowHead, clockWord, where } from './ui.js';
+import { $, el, fmt, num, read, write, arrowHead, clockWord, where, scrollMode } from './ui.js';
 import { windPicker } from './wind-pick.js';
 import { initSim } from './sim.js';
 import { renderSettings } from './settings.js';
@@ -360,7 +360,7 @@ const calcHelpBtn = el('button', {
     help.hidden = !help.hidden;
     calcHelpBtn.setAttribute('aria-expanded', String(!help.hidden));
     // Легенда — одразу під блоком: якщо прокручено вниз, повертаємось до неї
-    if (!help.hidden && scrollY > 0) scrollTo({ top: 0, behavior: 'smooth' });
+    if (!help.hidden && scrollY > 0) scrollTo({ top: 0, behavior: scrollMode() });
   },
 }, 'i');
 
@@ -482,7 +482,7 @@ function planCompass(S) {
     'aria-pressed': String(northUp), 'aria-label': northUp ? 'Схема: північ угору. Натисни — ніс угору' : 'Схема: ніс угору. Натисни — північ угору',
     onclick: flip, onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); } },
   },
-  el('svg:circle', { class: 'pc-hit', r: 28 }),
+  el('svg:circle', { class: 'pc-hit', r: 42 }),
   el('svg:circle', { class: 'pc-ring', r: 20 }),
   el('svg:g', { transform: `rotate(${deg})` },
     el('svg:path', { class: 'pc-n', d: 'M0,-17 L6,0 L-6,0 Z' }),
@@ -665,7 +665,7 @@ function openPanel(key, scroll = false) {
   }
   write(OPEN_KEY, key || '');
   // З тренажера — одразу до потрібної панелі, під липкою схемою
-  if (key && scroll) $(`cp-${key}`).scrollIntoView({ block: 'start', behavior: 'smooth' });
+  if (key && scroll) $(`cp-${key}`).scrollIntoView({ block: 'start', behavior: scrollMode() });
 }
 function bindTools() {
   for (const b of document.querySelectorAll('.calc-tool')) {
@@ -778,3 +778,12 @@ if (window.visualViewport) {
   visualViewport.addEventListener('scroll', placeTabs);
   placeTabs();
 }
+// Липкий блок угорі (схема чи кадр тренажера) і нижня панель накривають край екрана: поле у фокусі
+// чи прокручене до себе має ставати між ними, а не під ними — висоту блока віддаємо в scroll-padding
+const stickTop = () => {
+  const s = [$('calc-top'), $('sim-frame')].find((e) => e.offsetParent && getComputedStyle(e).position === 'sticky');
+  document.documentElement.style.setProperty('--stick-h', `${s ? Math.round(s.getBoundingClientRect().height + 20) : 0}px`);
+};
+const stickRO = new ResizeObserver(stickTop);
+stickRO.observe($('calc-top'));
+stickRO.observe($('sim-frame'));
