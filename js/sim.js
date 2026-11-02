@@ -966,6 +966,8 @@ export function initSim({ loads, loadById, openCalc }) {
     const load = loadById(cond.load);
     const r = simulate(s, load, { dt: DT });
     hint = { x: r.x, y: r.y };
+    // Час падіння — з тієї ж моделі, що й підказка; затримку скиду показуємо окремо, бо вона до падіння
+    $('sim-fall-v').textContent = `${fmt(r.time)}${cond.delay ? `+${fmt(cond.delay, 2)}` : ''} с`;
     hintSc = state.hint && gst.su > 0.01 ? scatter(s, load, { n: 60, seed: 3 }) : null;
     paintOsd();
   }
@@ -1010,6 +1012,8 @@ export function initSim({ loads, loadById, openCalc }) {
     $('sim-ret').setAttribute('aria-label', `Сітка: ${ret.name}`);
     $('sim-ret').title = `Сітка: ${ret.name}`;
     $('sim-hint').setAttribute('aria-pressed', String(state.hint));
+    // З прогнозом напрям вітру залежить від курсу — показуємо його біля носа
+    $('sim-nose-v').textContent = fcUsed(fc) ? `ніс ${fmt(cond.heading || 0, 0)}°` : 'ніс';
   }
 
   new ResizeObserver(resize).observe(cv);

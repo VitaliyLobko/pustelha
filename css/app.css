@@ -290,6 +290,11 @@ input[readonly] { color: var(--muted); background: transparent; }
     linear-gradient(#fff, #fff), linear-gradient(#fff, #fff), linear-gradient(#fff, #fff), linear-gradient(#fff, #fff);
   background-size: 18px 2px, 2px 18px, 18px 2px, 2px 18px, 18px 2px, 2px 18px, 18px 2px, 2px 18px;
   background-position: top left, top left, top right, top right, bottom left, bottom left, bottom right, bottom right; }
+/* Ніс дрона — посередині верхнього краю: усі напрямки («ліворуч», «з 3 год») — від нього */
+.sim-nose { position: absolute; left: 50%; top: 2px; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 1px;
+  transform: translateX(-50%); pointer-events: none; color: #fff; opacity: .85; font: 650 10px/1 var(--mono);
+  text-shadow: 0 1px 2px rgb(0 0 0 / .7); }
+.sim-nose svg { width: 12px; height: 7px; fill: currentColor; filter: drop-shadow(0 1px 1px rgb(0 0 0 / .6)); }
 /* Кнопки на кадрі — один стиль: однакова висота, напівпрозоре тло без розмиття (розмиття гальмувало б, коли тягнеш приціл) */
 .sim-frame > :is(.hint-btn, .sim-badge, .sim-corner, .sim-ret, .sim-wind-osd) {
   position: absolute; z-index: 1; height: var(--ov); box-sizing: border-box; border: 1px solid rgb(255 255 255 / .16);
@@ -325,6 +330,8 @@ input[readonly] { color: var(--muted); background: transparent; }
 .sim-frame > .sim-badge.br { right: var(--ov-gap); }
 .sim-badge svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; opacity: .7; }
 .sim-badge b { font: 650 14px var(--mono); }
+/* Час падіння — у плашці висоти через розділювач: висота й час завжди разом */
+.sim-fall { display: flex; align-items: center; gap: 4px; height: 100%; margin-left: 4px; padding-left: 9px; border-left: 1px solid rgb(255 255 255 / .16); }
 .sim-badge .mag-rng { padding: 1px 5px; border: 1px solid rgb(255 255 255 / .25); border-radius: 6px; font: 600 12px var(--mono); opacity: .8; }
 .sim-frame > .sim-badge[aria-expanded="true"] { color: #79aaf0; }
 .sim-pop { position: absolute; left: var(--ov-gap); right: var(--ov-gap); bottom: calc(var(--ov-gap) * 2 + var(--ov)); z-index: 2; display: grid; gap: 4px;
@@ -447,6 +454,12 @@ input[readonly] { color: var(--muted); background: transparent; }
   /* Тінь кольору тла закриває смугу над блоком, щоб розбір не просвічував, коли прокручується під ним */
   box-shadow: 0 -10px 0 2px var(--bg); }
 .calc-top > .error { grid-column: 1 / -1; margin: 4px; }
+/* «i» — у куті схеми, як на кадрі тренажера; легенда — під блоком, щоб липкий блок не ріс */
+.calc-top > .hint-btn { position: absolute; left: 8px; top: 8px; width: 30px; height: 30px; border: 1px solid var(--line);
+  background: var(--surface-2); color: var(--muted); }
+.calc-top > .hint-btn[aria-expanded="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-2); }
+.calc-help { margin-top: 10px; }
+.plan.lg-plan { width: 34px; height: 30px; aspect-ratio: auto; margin: 0; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); overflow: hidden; }
 .calc-top .plan { max-width: 360px; }
 /* Схема в блоці дрібна — підписи більші, щоб читались */
 .calc-top .plan .ring-label { font-size: 17px; }

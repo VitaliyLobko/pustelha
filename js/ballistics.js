@@ -55,7 +55,8 @@ export function levelWind(levels, z, z0) {
 
 /**
  * Середній вітер по висоті в осях дрона: z → {x, y}.
- * Вручну: wind і clock — на висоті refHeight (за замовчуванням — висота скиду), z0 > 0 — лог-профіль, інакше однаковий.
+ * Вручну: wind і clock — на висоті refHeight (за замовчуванням — висота скиду), z0 > 0 — лог-профіль, інакше однаковий;
+ * zp — шорсткість лише для профілю, коли вона інша, ніж для поривів (замір біля землі — на відкритому місці).
  * З прогнозу: levels [{z, speed, dir — звідки, ° за компасом}], heading — куди дивиться ніс, °; scale — підгонка під замір.
  */
 export function meanWind(s) {
@@ -68,8 +69,8 @@ export function meanWind(s) {
   }
   const air = windVector(s.wind || 0, s.clock ?? 12);
   if (!(s.z0 > 0)) return () => air;
-  const zr = s.refHeight ?? s.height;
-  return (z) => { const f = logShare(z, zr, s.z0); return { x: air.x * f, y: air.y * f }; };
+  const zr = s.refHeight ?? s.height, zp = s.zp > 0 ? s.zp : s.z0;
+  return (z) => { const f = logShare(z, zr, zp); return { x: air.x * f, y: air.y * f }; };
 }
 
 /* --- пориви --- */
@@ -86,7 +87,8 @@ export function gustStats(s) {
   let su;
   if (s.levels?.length && s.gust10 > 0) su = Math.max(0, s.gust10 * (s.scale > 0 ? s.scale : 1) - speed(10)) / 3;
   else {
-    const zr = Math.max(s.refHeight ?? s.height, 2);
+    // На висоті скиду — над шорсткістю, де закон працює; за спільного профілю це те саме число, що й на висоті заміру
+    const zr = Math.max(s.height, 2, 1.5 * z0);
     su = speed(zr) / Math.log(zr / z0);
   }
   su *= s.gusty ?? 1;

@@ -280,6 +280,18 @@ function stat(label, value, unit, sub, cls = '') {
     sub ? el('div', { class: 'stat-sub' }, sub) : null);
 }
 
+// «i» живе між перерисовками блоку — створюємо раз, щоб не губився стан «відкрито»
+const calcHelpBtn = el('button', {
+  type: 'button', class: 'hint-btn', 'aria-expanded': 'false', 'aria-controls': 'calc-help', 'aria-label': 'Що на схемі', title: 'Що на схемі',
+  onclick: () => {
+    const help = $('calc-help');
+    help.hidden = !help.hidden;
+    calcHelpBtn.setAttribute('aria-expanded', String(!help.hidden));
+    // Легенда — одразу під блоком: якщо прокручено вниз, повертаємось до неї
+    if (!help.hidden && scrollY > 0) scrollTo({ top: 0, behavior: 'smooth' });
+  },
+}, 'i');
+
 function render() {
   const out = $('result');
   const load = currentLoad();
@@ -318,6 +330,7 @@ function render() {
 
   // Угорі, липким, як кадр у тренажері: схема й головні числа; під ним — умови кнопками, ще нижче — розбір
   $('calc-top').replaceChildren(
+    calcHelpBtn,
     plan(r, wTop),
     el('div', { class: 'stats mini' },
       stat('Куди впаде', fmt(dist), 'м', dist >= 0.05 ? where(r.x, r.y) : 'під дроном', 'hit'),
@@ -482,6 +495,7 @@ function paintStatic() {
   const on = fcOn();
   $('w-hand').hidden = state.src !== 'hand';
   $('w-fc').hidden = state.src !== 'fc';
+  $('w-ref-note').hidden = state.ref !== '2';
   if (state.src === 'fc') paintFc(fc ? '' : 'Прогнозу ще немає: встав координати й натисни «Прогноз». Поки рахую з ручного вітру.');
   const s = params();
   const w = windAt(s, state.height), g = gustStats(s);

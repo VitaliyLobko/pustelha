@@ -27,7 +27,10 @@ export function windSpec(st, H, fc) {
     }
     return spec;
   }
-  return { wind: st.wind, clock: st.clock, refHeight: refZ(st.ref, H), z0, gusty };
+  // Біля землі серед дерев чи посадок замір нічого не каже про вітер над ними — вважаємо, що міряли на відкритому:
+  // профіль від 2 м — як над полем, а місцевість лишається для поривів
+  const zp = st.ref === '2' ? z0Of('open') : z0;
+  return { wind: st.wind, clock: st.clock, refHeight: refZ(st.ref, H), z0, zp, gusty };
 }
 
 /** Курс носа, за якого вітер на висоті H дме з години clock: тренажер бере з прогнозу силу й профіль, а напрям — як вибрав. */
