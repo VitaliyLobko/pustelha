@@ -13,6 +13,7 @@ const ASSETS = [
   './js/ui.js',
   './js/wind-pick.js',
   './js/sim.js',
+  './js/cond.js',
   './js/settings.js',
   './js/theme-boot.js',
   './js/warhead.js',

@@ -215,17 +215,15 @@ input[readonly] { color: var(--muted); background: transparent; }
 .tabs button.on svg { background: var(--accent-soft); }
 /* Перейшов у розділ — значок ~2,4 с грає своє; лише transform і opacity, щоб не гальмувати перехід */
 .tabs svg :is(g, path, circle) { transform-box: fill-box; transform-origin: center; }
-/* Тренажер: авіабомба носом униз — зривається з прискоренням і йде вниз, згори заходить наступна */
+/* Тренажер: авіабомба носом униз гойдається з боку в бік, як підвішена, і поступово заспокоюється */
 .tabs .spd { stroke-width: 1.3; stroke-opacity: .45; }
 /* Бомба залита, як на «Скиді»: контуром вона читалась як ліхтарик; поясок — кольором фону */
 .tabs .bomb path:not(.spd) { fill: currentColor; stroke-width: 1; }
 .tabs .bomb path:last-child { stroke: var(--surface); stroke-width: 1.1; }
-.tabs .play[data-tab="sim"] .bomb { animation: tab-bomb 1.2s 2 both; }
-@keyframes tab-bomb {
-  0%, 10% { transform: none; opacity: 1; animation-timing-function: ease-in; }
-  48% { transform: translateY(9px); opacity: 0; }
-  49% { transform: translateY(-9px); opacity: 0; animation-timing-function: ease-out; }
-  100% { transform: none; opacity: 1; } }
+.tabs .play[data-tab="sim"] .bomb { transform-origin: 50% 0; animation: tab-sway 2.4s ease-in-out both; }
+@keyframes tab-sway {
+  0%, 100% { transform: none; } 12% { transform: rotate(16deg); } 30% { transform: rotate(-13deg); }
+  48% { transform: rotate(9deg); } 66% { transform: rotate(-6deg); } 82% { transform: rotate(3deg); } }
 /* Розрахунок: точка летить траєкторією в ціль, ціль спалахує від влучання */
 .tabs .play[data-tab="calc"] .ball { animation: tab-fly 1.2s cubic-bezier(.35, 0, .7, 1) 2 both; }
 .tabs .play[data-tab="calc"] .aim { animation: tab-aim 1.2s ease-out 2; }
@@ -278,7 +276,7 @@ input[readonly] { color: var(--muted); background: transparent; }
 .calc-wind { margin-top: 6px; }
 
 /* --- тренажер: кадр з камери, кнопки в кутах, під ним — налаштування й показання (розкладка з Shooter's Log) --- */
-.sim { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.sim { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
 .sim-frame { --ov: 34px; --ov-gap: 8px; position: relative; width: 100%; max-width: min(100%, 60vh); margin: 0 auto; aspect-ratio: 1;
   border-radius: 12px; overflow: hidden; background: #3d4429;
   /* Липкий, як у Shooter's Log: кадр лишається вгорі, показання й налаштування прокручуються під ним;
@@ -373,7 +371,18 @@ input[readonly] { color: var(--muted); background: transparent; }
 
 /* Підказка, вантаж, нова ситуація — один рядок */
 .sim-line { display: flex; gap: 8px; align-items: center; }
-.sim-load { flex: 1; min-width: 0; min-height: 40px; padding: 6px 10px; font-weight: 650; background: var(--surface-2); }
+/* Вантаж: тап — стрічка під рядком, свайп — наступний */
+.sim-load { flex: 1; min-width: 0; min-height: 40px; display: flex; align-items: center; gap: 6px; padding: 6px 8px 6px 10px;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); color: inherit; font: inherit; font-weight: 650;
+  text-align: left; cursor: pointer; touch-action: pan-y; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.sim-load > svg:first-child { flex: none; width: 20px; height: 20px; fill: currentColor; opacity: .7; }
+.sim-load > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sim-more-ico { flex: none; width: 18px; height: 18px; fill: none; stroke: var(--muted); stroke-width: 1.8; stroke-linecap: round;
+  stroke-linejoin: round; transition: transform .15s; }
+.sim-load[aria-expanded="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.sim-load[aria-expanded="true"] .sim-more-ico { transform: rotate(180deg); }
+.ld-sym { width: 26px; height: 26px; fill: currentColor; opacity: .75; }
+.link-btn { margin-top: 4px; padding: 6px 2px; border: 0; background: none; color: var(--accent-2); font: 600 13px system-ui, sans-serif; cursor: pointer; }
 .sim-icon { flex: none; display: grid; place-items: center; width: 44px; height: 40px; padding: 0; border: 1px solid var(--line); border-radius: 12px;
   background: var(--surface-2); cursor: pointer; }
 .sim-icon svg, .sim-tool svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -430,6 +439,31 @@ input[readonly] { color: var(--muted); background: transparent; }
 .readout .good { color: var(--good); }
 .readout .bad { color: var(--bad); }
 .readout .fx { color: var(--muted); font-size: 14px; }
+
+/* --- розрахунок: угорі липким — схема й головні числа, під ними — умови кнопками, ще нижче — розбір --- */
+.calc-top { position: sticky; top: calc(env(safe-area-inset-top) + 8px); z-index: 3; display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; align-items: center; padding: 8px;
+  border: 1px solid var(--line); border-radius: 14px; background: var(--surface);
+  /* Тінь кольору тла закриває смугу над блоком, щоб розбір не просвічував, коли прокручується під ним */
+  box-shadow: 0 -10px 0 2px var(--bg); }
+.calc-top > .error { grid-column: 1 / -1; margin: 4px; }
+.calc-top .plan { max-width: 260px; }
+/* Схема в блоці дрібна — підписи більші, щоб читались */
+.calc-top .plan .ring-label { font-size: 17px; }
+.calc-top .plan :is(.nadir-label, .nose-label) { font-size: 17px; }
+.calc-top .plan .hit-label { font-size: 22px; }
+.calc-top .plan .wind-label { font-size: 19px; }
+.stats.mini { grid-template-columns: minmax(0, 1fr); gap: 5px; margin: 0; }
+.stats.mini .stat { padding: 5px 9px; border-radius: 10px; }
+.stats.mini .stat-label { font-size: 11px; }
+.stats.mini .stat-value { margin-top: 0; font-size: 17px; line-height: 1.15; }
+.stats.mini .stat-value small { font-size: 12px; }
+.stats.mini .stat-sub { margin-top: 0; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Висота й вітер і так на кнопках під блоком — підписи лишаємо лише там, де вони нові */
+.stats.mini .stat:not(.hit, #sc-tile) .stat-sub { display: none; }
+.calc-tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 12px; }
+.calc-panel { margin-top: 8px; }
+.calc-panel > :first-child { margin-top: 0; }
 
 /* --- результат --- */
 .result { margin-top: 18px; }

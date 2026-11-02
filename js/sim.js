@@ -1,11 +1,10 @@
 // Тренажер скиду: вид з камери вниз, приціл — точка під дроном, тягнеться пальцем; цілі поки квадратами.
-import { simulate, gustStats, gustSeries, gustStep, gustStart, CALM_GUST, gaussian, meanWind, levelWind, scatter } from './ballistics.js';
-import { TERRAINS, GUSTS, z0Of, windSpec, headingFor } from './wind.js';
-import { loadFc, fcAge } from './forecast.js';
-import { $, el, fmt, read, write, vibrate, clockWord, where, wheelStrip } from './ui.js';
-import { windPicker } from './wind-pick.js';
+import { simulate, gustStats, gustSeries, gustStep, gustStart, CALM_GUST, gaussian, meanWind, scatter } from './ballistics.js';
+import { loadFc } from './forecast.js';
+import { $, el, fmt, read, write, vibrate, where, wheelStrip } from './ui.js';
 import { RENEW_MODES, RENEW_NOTE, renewPref, setRenew } from './settings.js';
 import { WARHEADS, warhead, radii, effect, whyNot, describe } from './warhead.js';
+import { cond, saveCond, fcUsed, condParams } from './cond.js';
 
 const KEY = 'pustelha:sim';
 // Кут огляду камери по ширині кадру — типовий для дронів; кратність звужує його
@@ -34,6 +33,9 @@ function takes(icon) {
   return [r.length && `${r.join(' чи ')} — у радіусі`, d.length && `${d.join(' чи ')} — лише прямим влучанням`].filter(Boolean).join(', ');
 }
 const SYM_MIN = 26;
+// Вантаж у стрічці — та сама авіабомба носом униз, що на кнопці
+const LOAD_ICO = '<svg class="ld-sym" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.7 7.6 15.8 4.4V2.6H8.2v1.8l3.1 3.2z"/>'
+  + '<path d="M12.9 6.6 14.9 10v7.3c0 2.7-1.3 5-2.9 5s-2.9-2.3-2.9-5V10l2-3.4z"/></svg>';
 const MOVES = [
   { v: 0, name: 'стоїть' },
   { v: 1.4, name: 'крок 1,4 м/с', short: 'крок' },
@@ -46,20 +48,16 @@ const RETICLES = [
   { id: 'meter', name: 'Метри на землі' },
   { id: 'dot', name: 'Точка' },
 ];
-const DEFAULTS = {
-  height: 100, zoom: 4, wind: 4, clock: 3, kind: 'inf', move: 0, hint: false, load: 'c1', ret: 'cross',
-  terrain: 'open', gusts: 'mid', real: false,
-};
-// Повітря в тренажері — стандартне, якщо вітер не з прогнозу (тоді температура й тиск — з нього)
-const AIR = { tempC: 15, elevation: 150 };
+// Тут — лише своє, тренажерне; висота, вантаж, вітер і повітря — спільні умови з «Розрахунку» (cond.js)
+const DEFAULTS = { zoom: 4, kind: 'inf', move: 0, hint: false, ret: 'cross' };
 const DT = 0.004;
 
 const state = { ...DEFAULTS, ...read(KEY, {}) };
-const save = () => write(KEY, state);
+const save = () => { write(KEY, state); saveCond(); };
 const kind = () => KINDS.find((k) => k.id === state.kind) || KINDS[0];
 const move = () => MOVES.find((m) => m.v === state.move) || MOVES[0];
 /** Скільки метрів землі вміщає кадр по ширині. */
-const spanM = () => 2 * state.height * Math.tan(HFOV / 2) / state.zoom;
+const spanM = () => 2 * cond.height * Math.tan(HFOV / 2) / state.zoom;
 
 function mulberry32(a) {
   return () => {
@@ -70,7 +68,7 @@ function mulberry32(a) {
   };
 }
 
-export function initSim({ loads, loadById }) {
+export function initSim({ loads, loadById, openCalc }) {
   const frame = $('sim-frame');
   const cv = $('sim-cv');
   const ctx = cv.getContext('2d');
@@ -84,20 +82,13 @@ export function initSim({ loads, loadById }) {
   let hint = null, hintSc = null;
   let loop = 0, lastT = 0;
   let msgT = 0, fireT = 0;
-  // Прогноз береться з «Розрахунку»; у тренажері — лише якщо ввімкнено «Реальний»
+  // Прогноз — той, що взяли в «Розрахунку»; діє, коли там вибрано вітер з прогнозу
   let fc = loadFc();
+  let shownH = cond.height;
 
   const toS = (e, n) => [side / 2 + (e - cam.e) * ppm, side / 2 - (n - cam.n) * ppm];
-  const realOn = () => state.real && !!fc;
-  const params = () => {
-    const base = { height: state.height, speed: 0, ...AIR };
-    if (realOn()) {
-      // Сила, профіль по висоті й пориви — з прогнозу; напрям відносно носа — як вибрав: пілот сам розвертає дрон
-      const heading = headingFor(fc, state.height, state.clock, z0Of(state.terrain));
-      return { ...base, ...windSpec({ src: 'fc', terrain: state.terrain, gusts: state.gusts, heading }, state.height, fc) };
-    }
-    return { ...base, ...windSpec({ src: 'hand', wind: state.wind, clock: state.clock, ref: 'drone', terrain: state.terrain, gusts: state.gusts }, state.height, null) };
-  };
+  // Ті самі умови, що в «Розрахунку», лише дрон висить
+  const params = () => condParams(fc, { speed: 0 });
 
   /* --- живий вітер: середній на висоті дрона плюс порив, що змінюється з часом, — як показує дрон --- */
   let gst = null, meanH = { x: 0, y: 0 };
@@ -269,7 +260,7 @@ export function initSim({ loads, loadById }) {
       ctx.lineWidth = 1.5;
       ctx.setLineDash([4, 3]);
       ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x, y); ctx.stroke();
-      const ld = loadById(state.load);
+      const ld = loadById(cond.load);
       const rk = effect(ld, round.kind.icon) === 'radius' ? radii(ld).kill * ppm : 0;
       ctx.beginPath(); ctx.arc(x, y, Math.max(7, rk), 0, 2 * Math.PI); ctx.stroke();
       ctx.setLineDash([]);
@@ -292,10 +283,12 @@ export function initSim({ loads, loadById }) {
     const now = performance.now();
     for (const b of bombs) {
       const tau = (now - b.t0) / 1000;
+      // Затримка скиду: механізм ще не відпустив — вантаж на дроні
+      if (tau < 0) continue;
       const p = b.path[Math.min(b.path.length - 1, Math.floor(tau / DT))];
       const [x, y] = toS(b.e0 + p[1], b.n0 + p[0]);
       // Чим нижче, тим менший — падає від камери
-      const r = 2.5 + 5 * (p[2] / state.height);
+      const r = 2.5 + 5 * (p[2] / cond.height);
       ctx.fillStyle = '#1b1b1b';
       ctx.strokeStyle = '#fff';
       ctx.lineWidth = 1.5;
@@ -497,20 +490,22 @@ export function initSim({ loads, loadById }) {
 
   /* --- скид --- */
   function drop() {
-    const load = loadById(state.load);
+    const load = loadById(cond.load);
     const s = params();
     // Порив, що дме в момент скиду, триває й далі — вантаж падає в справжньому, не середньому вітрі
     const gust = gst?.su > 0.01 ? gustSeries(gst, Math.random, 60, gcur) : null;
     const r = simulate(s, load, { dt: DT, track: true, gust });
     const w = windNow();
+    // Вантаж іде вниз після затримки механізму — за неї рухома ціль теж встигає зміститись
+    const delay = cond.delay || 0;
     bombs.push({
-      e0: reticle.e, n0: reticle.n, path: r.path, T: r.time, r, load, t0: performance.now(),
+      e0: reticle.e, n0: reticle.n, path: r.path, T: r.time, r, load, t0: performance.now() + delay * 1000, delay,
       wNow: Math.hypot(w.x, w.y), wMean: Math.hypot(meanH.x, meanH.y), k: gst?.su > 0.01 ? gcur.u / gst.su : 0,
     });
     round.drops++;
     vibrate(15);
     paintScore();
-    flyBomb(r.time);
+    flyBomb(delay + r.time);
     kick();
   }
 
@@ -560,7 +555,7 @@ export function initSim({ loads, loadById }) {
     bursts.push({ e, n, t0: now, r: Math.max(1, R.kill) });
     round.last = {
       killed: struck.length, wounded, direct, eff, R, why: eff === 'none' ? whyNot(b.load, icon) : '',
-      e, n, best, T: b.T, drift: Math.hypot(b.r.x, b.r.y), dx: b.r.x, dy: b.r.y, no: round.drops,
+      e, n, best, T: b.T, delay: b.delay, drift: Math.hypot(b.r.x, b.r.y), dx: b.r.x, dy: b.r.y, no: round.drops,
       wNow: b.wNow, wMean: b.wMean, k: b.k,
     };
     paintScore();
@@ -592,14 +587,14 @@ export function initSim({ loads, loadById }) {
         ` до краю · ${where(L.best.dn, L.best.de, ['вище', 'нижче'])} від центру цілі${zone}`)));
     }
     if (L) {
-      rows.push(row('Падав', `${fmt(L.T)} с · вітер зніс ${fmt(L.drift)} м${L.drift >= 0.05 ? ` (${where(L.dx, L.dy, ['вгору', 'вниз'])})` : ''}`));
+      rows.push(row('Падав', `${fmt(L.T)} с${L.delay ? ` + затримка ${fmt(L.delay, 2)} с` : ''} · вітер зніс ${fmt(L.drift)} м${L.drift >= 0.05 ? ` (${where(L.dx, L.dy, ['вгору', 'вниз'])})` : ''}`));
       if (L.wMean > 0.05 || Math.abs(L.k) > 0) {
         rows.push(row('Вітер', `у момент скиду ${fmt(L.wNow)} м/с, середній ${fmt(L.wMean)}${L.k > 1 ? ' — скинув у порив' : L.k < -1 ? ' — скинув у затишшя' : ''}`));
       }
-      if (state.move) rows.push(row('Ціль', `за цей час пройшла ${fmt(state.move * L.T)} м — бери упередження по ходу руху`));
+      if (state.move) rows.push(row('Ціль', `за цей час пройшла ${fmt(state.move * (L.T + (L.delay || 0)))} м — бери упередження по ходу руху`));
     }
     if (round) {
-      const ld = loadById(state.load), icon = round.kind.icon, eff = effect(ld, icon);
+      const ld = loadById(cond.load), icon = round.kind.icon, eff = effect(ld, icon);
       const wh = warhead(ld).name.toLowerCase();
       rows.push(row('БЧ', eff === 'radius' ? describe(ld)
         : eff === 'direct' ? `${wh} · по цілі «${round.kind.name}» — лише пряме влучання` : `${wh} · ${whyNot(ld, icon)}`));
@@ -607,7 +602,7 @@ export function initSim({ loads, loadById }) {
     if (state.hint && hint) {
       const d = Math.hypot(hint.x, hint.y);
       rows.push(row('Підказка', `${d >= 0.05 ? `впаде ${where(hint.x, hint.y, ['вище', 'нижче'])} від прицілу` : 'впаде під приціл'} — синє кільце${
-        effect(loadById(state.load), round.kind.icon) === 'radius' ? ' розміром із зону ураження' : ''}${
+        effect(loadById(cond.load), round.kind.icon) === 'radius' ? ' розміром із зону ураження' : ''}${
         hintSc?.r50 > 0.05 ? `; через пориви половина скидів — у блакитній плямі ≈ ${fmt(hintSc.r50)} м` : ''}`, 'fx'));
     }
     out.replaceChildren(...rows);
@@ -637,7 +632,7 @@ export function initSim({ loads, loadById }) {
 
   /* --- жести на кадрі: один палець будь-де — тягне приціл; два пальці: щипок — кратність, разом вгору-вниз — висота --- */
   // Вгору — вище: 1 px ≈ 0,8 м, крок 5 м; вправо — більша кратність, крок на кожні 40 px
-  const liftTo = (h0, dy) => Math.max(25, Math.min(300, Math.round((h0 - dy * 0.8) / 5) * 5));
+  const liftTo = (h0, dy) => Math.max(10, Math.min(300, Math.round((h0 - dy * 0.8) / 5) * 5));
   const zoomTo = (z0, dx) => Math.max(1, Math.min(8, z0 + Math.round(dx / 40)));
   const fingers = new Map();
   let gest = null;
@@ -699,7 +694,7 @@ export function initSim({ loads, loadById }) {
     btn.addEventListener('click', (e) => { if (performance.now() - swipedAt < 400) e.stopImmediatePropagation(); }, { capture: true });
     btn.addEventListener('pointerdown', (e) => {
       btn.setPointerCapture(e.pointerId);
-      s = { x: e.clientX, y: e.clientY, h0: state.height, z0: state.zoom, moved: false };
+      s = { x: e.clientX, y: e.clientY, h0: cond.height, z0: state.zoom, moved: false };
     });
     btn.addEventListener('pointermove', (e) => {
       if (!s) return;
@@ -742,15 +737,17 @@ export function initSim({ loads, loadById }) {
 
   /** Висота чи кратність під пальцем: кадр перемальовується одразу, цілі лишаються на своїх місцях на землі. */
   function setView(v) {
-    const was = state.height;
-    Object.assign(state, v);
+    const was = cond.height;
+    if (v.height != null) cond.height = v.height;
+    if (v.zoom != null) state.zoom = v.zoom;
     if (v.height != null && v.height === was && v.zoom == null) return;
+    shownH = cond.height;
     ppm = side / spanM();
     ground = null;
     clampReticle();
-    $('sim-h-v').textContent = `${state.height} м`;
+    $('sim-h-v').textContent = `${cond.height} м`;
     $('sim-zoom-v').textContent = `${state.zoom}×`;
-    flash(v.height != null ? `↕ ${state.height} м` : `${state.zoom}×`);
+    flash(v.height != null ? `↕ ${cond.height} м` : `${state.zoom}×`);
     if (v.height != null) refreshWind();
     if (!loop) draw();
   }
@@ -809,15 +806,30 @@ export function initSim({ loads, loadById }) {
   zIn.addEventListener('input', () => setView({ zoom: +zIn.value }));
   zIn.addEventListener('change', () => settleView(false));
 
-  /* --- рядок під кадром --- */
-  const sel = $('sim-load');
+  /* --- рядок під кадром; вантаж — стрічкою, як ціль; той самий, що в «Розрахунку», свої задаються там --- */
+  const ldStrip = el('div', { class: 'tgt-strip', role: 'radiogroup', 'aria-label': 'Вантаж' });
+  const ldNote = el('p', { class: 'tgt-note' });
+  const ldWheel = wheelStrip(ldStrip, (b) => {
+    const l = loadById(b.dataset.v);
+    ldNote.textContent = `${l.name || 'Без назви'}: ${fmt(l.mass, 2)} кг · ${describe(l)}`;
+  });
+  $('sim-ldp').append(ldStrip, ldNote, el('button', {
+    type: 'button', class: 'link-btn', onclick: () => openCalc('load'),
+  }, 'Свої вантажі — у «Розрахунку» ›'));
   const paintLoads = () => {
     const list = loads();
-    if (!list.some((l) => l.id === state.load)) state.load = list[0].id;
-    sel.replaceChildren(...list.map((l) => el('option', { value: l.id }, l.name || 'Без назви')));
-    sel.value = state.load;
+    if (!list.some((l) => l.id === cond.load)) cond.load = list[0].id;
+    $('sim-load-v').textContent = loadById(cond.load).name || 'Без назви';
+    ldStrip.replaceChildren(...list.map((l) => {
+      const ico = el('span', { class: 'tgt-ico ld-ico' });
+      ico.innerHTML = LOAD_ICO;
+      return el('button', {
+        type: 'button', class: 'tgt-opt', role: 'radio', 'data-v': l.id, 'aria-checked': String(l.id === cond.load),
+        onclick: () => { cond.load = l.id; paintLoads(); changed(); },
+      }, ico, el('span', {}, l.name || 'Без назви'));
+    }));
+    if (!$('sim-ldp').hidden) ldWheel.settle(ldStrip.querySelector('[aria-checked="true"]'));
   };
-  sel.addEventListener('change', () => { state.load = sel.value; changed(); });
   $('sim-hint').addEventListener('click', () => { state.hint = !state.hint; changed(); });
   $('sim-new').addEventListener('click', () => {
     vibrate(8);
@@ -825,9 +837,10 @@ export function initSim({ loads, loadById }) {
     const said = [];
     if (m === 'wind' || m === 'both') {
       // Випадковий вітер 1–8 м/с з будь-якої години
-      state.wind = 1 + Math.floor(Math.random() * 8);
-      state.clock = 1 + Math.floor(Math.random() * 12);
-      said.push(`вітер ${state.wind} м/с з ${state.clock} год`);
+      cond.wind = 1 + Math.floor(Math.random() * 8);
+      cond.clock = 1 + Math.floor(Math.random() * 12);
+      cond.src = 'hand';
+      said.push(`вітер ${cond.wind} м/с з ${cond.clock} год`);
     }
     if (m === 'move' || m === 'both') {
       // Інша швидкість, ніж була; напрям кожної цілі й так новий
@@ -859,21 +872,29 @@ export function initSim({ loads, loadById }) {
   });
   $('sim-drop').addEventListener('click', drop);
 
-  /* --- ціль, вітер, рух: тап — панель під рядком, свайп — наступне значення --- */
-  const tools = [...document.querySelectorAll('#pane-sim .sim-tool[data-panel]')];
+  /* --- ціль, рух: тап — панель під рядком; вітер: тап — у «Розрахунок»; свайп — наступне значення --- */
+  const tools = [...document.querySelectorAll('#pane-sim .sim-tools .sim-tool, #sim-load')];
   const cycle = {
     tgt: (d) => { state.kind = KINDS[(KINDS.indexOf(kind()) + d + KINDS.length) % KINDS.length].id; changed({ fresh: true }); },
     wind: (d) => {
       const steps = [0, 2, 4, 6, 8];
-      const i = steps.findIndex((v) => v >= state.wind);
-      state.wind = steps[Math.max(0, Math.min(steps.length - 1, (i < 0 ? steps.length - 1 : i) + d))];
+      const i = steps.findIndex((v) => v >= cond.wind);
+      cond.wind = steps[Math.max(0, Math.min(steps.length - 1, (i < 0 ? steps.length - 1 : i) + d))];
+      cond.src = 'hand';
       changed();
     },
     move: (d) => { state.move = MOVES[(MOVES.indexOf(move()) + d + MOVES.length) % MOVES.length].v; changed(); },
+    load: (d) => {
+      const list = loads();
+      const i = list.findIndex((l) => l.id === cond.load);
+      cond.load = list[(i + d + list.length) % list.length].id;
+      paintLoads();
+      changed();
+    },
   };
   // Довге натискання скидає: вітер — у штиль (і з прогнозу на заданий), рух — цілі стоять
   const reset = {
-    wind: () => { state.wind = 0; state.real = false; changed(); flash('Вітер скинуто — штиль'); },
+    wind: () => { cond.wind = 0; cond.src = 'hand'; changed(); flash('Вітер скинуто — штиль'); },
     move: () => { state.move = 0; changed(); flash('Рух скинуто — цілі стоять'); },
   };
   for (const b of tools) {
@@ -904,13 +925,16 @@ export function initSim({ loads, loadById }) {
     });
     b.addEventListener('click', () => {
       if (swiped) { swiped = false; return; }
-      const open = b.getAttribute('aria-expanded') !== 'true';
+      const open = b.dataset.panel && b.getAttribute('aria-expanded') !== 'true';
       for (const o of tools) {
+        if (!o.dataset.panel) continue;
         o.setAttribute('aria-expanded', String(o === b && open));
         $(o.dataset.panel).hidden = !(o === b && open);
       }
+      if (!b.dataset.panel) { openCalc(b.dataset.key); return; }
       // Стрічку вирівнюємо, коли її видно: у прихованої немає розмірів
       if (b.dataset.key === 'tgt' && open) tgtWheel.settle(tgtStrip.querySelector('[aria-checked="true"]'));
+      if (b.dataset.key === 'load' && open) ldWheel.settle(ldStrip.querySelector('[aria-checked="true"]'));
     });
   }
   // Ціль — стрічкою, як у Shooter's Log: посередині в рамці, під стрічкою — що це і чим брати; вибір — тапом
@@ -930,34 +954,16 @@ export function initSim({ loads, loadById }) {
   $('sim-move').append(el('div', { class: 'chips' }, MOVES.map((m) => el('button', {
     type: 'button', 'data-v': String(m.v), onclick: () => { state.move = m.v; changed(); },
   }, m.name))));
-  // У «реальному» вітрі сила — з прогнозу, на годиннику лишається тільки напрям відносно носа
-  const wind = windPicker({ get: () => state, set: (v) => { if (realOn()) delete v.wind; Object.assign(state, v); changed(); } });
-  const pick = (list, key) => el('div', { class: 'chips', 'data-key': key }, list.map(([v, label]) => el('button', {
-    type: 'button', 'data-v': v, onclick: () => {
-      if (key === 'real') {
-        fc = loadFc();
-        if (v === 'real' && !fc) { flash('Прогнозу ще немає'); return; }
-        state.real = v === 'real';
-      } else state[key] = v;
-      changed();
-    },
-  }, label)));
-  const realNote = el('p', { class: 'note' });
-  $('sim-wind').append(wind.el,
-    el('div', { class: 'label' }, 'Вітер'), pick([['hand', 'Заданий'], ['real', 'Реальний — з прогнозу']], 'real'), realNote,
-    el('div', { class: 'label' }, 'Місцевість під дроном'), pick(TERRAINS, 'terrain'),
-    el('div', { class: 'label' }, 'Пориви'), pick(GUSTS, 'gusts'));
 
   /** Середній вітер на висоті дрона, сила поривів, підказка з розкидом — після будь-якої зміни вітру, висоти чи вантажу. */
   function refreshWind() {
     const s = params();
-    if (realOn()) state.wind = Math.round(levelWind(fc.levels, state.height, z0Of(state.terrain)).speed * 10) / 10;
-    meanH = meanWind(s)(state.height);
+    meanH = meanWind(s)(cond.height);
     gst = gustStats(s);
     // Порив стартує не з нуля, а з випадкового в межах звичайного — інакше перші півхвилини вітер був би рівно середній
     if (!(gst.su > 0.01)) gcur = CALM_GUST;
     else if (gcur === CALM_GUST) gcur = gustStart(gst, N);
-    const load = loadById(state.load);
+    const load = loadById(cond.load);
     const r = simulate(s, load, { dt: DT });
     hint = { x: r.x, y: r.y };
     hintSc = state.hint && gst.su > 0.01 ? scatter(s, load, { n: 60, seed: 3 }) : null;
@@ -983,7 +989,9 @@ export function initSim({ loads, loadById }) {
     const k = kind();
     // На кнопці — коротко, щоб уміщалось на 360 px; напрям вітру — стрілкою на кадрі, повністю — у панелі
     $('sim-tgt-v').textContent = k.name;
-    $('sim-wind-v').textContent = state.wind ? `${fmt(state.wind, state.wind % 1 ? 1 : 0)} м/с` : 'штиль';
+    // Сила — на висоті дрона: з прогнозу чи з профілю, а не задана біля землі
+    const wm = Math.hypot(meanH.x, meanH.y);
+    $('sim-wind-v').textContent = wm >= 0.05 ? `${fmt(wm, wm < 10 ? 1 : 0)} м/с` : 'штиль';
     $('sim-move-v').textContent = state.move ? (move().short || move().name) : 'стоїть';
     $('sim-tgt-ico').innerHTML = SYM(k.icon);
     let on = null;
@@ -993,27 +1001,15 @@ export function initSim({ loads, loadById }) {
     }
     if (!$('sim-tgt').hidden) tgtWheel.settle(on);
     for (const b of $('sim-move').querySelectorAll('button')) b.classList.toggle('on', +b.dataset.v === state.move);
-    tools.forEach((b) => b.classList.toggle('hot', (b.dataset.key === 'wind' && state.wind > 0) || (b.dataset.key === 'move' && state.move > 0)));
-    wind.paint();
+    tools.forEach((b) => b.classList.toggle('hot', (b.dataset.key === 'wind' && wm >= 0.05) || (b.dataset.key === 'move' && state.move > 0)));
     $('sim-zoom-v').textContent = `${state.zoom}×`;
-    $('sim-h-v').textContent = `${state.height} м`;
-    hIn.value = state.height;
+    $('sim-h-v').textContent = `${cond.height} м`;
+    hIn.value = cond.height;
     zIn.value = state.zoom;
     const ret = RETICLES.find((r) => r.id === state.ret);
     $('sim-ret').setAttribute('aria-label', `Сітка: ${ret.name}`);
     $('sim-ret').title = `Сітка: ${ret.name}`;
     $('sim-hint').setAttribute('aria-pressed', String(state.hint));
-    for (const box of $('sim-wind').querySelectorAll('.chips[data-key]')) {
-      const key = box.dataset.key;
-      for (const b of box.querySelectorAll('button')) b.classList.toggle('on', key === 'real' ? (b.dataset.v === 'real') === realOn() : b.dataset.v === state[key]);
-    }
-    const age = fc && fcAge(fc);
-    realNote.className = `note${realOn() && age.stale ? ' warn' : ''}`;
-    realNote.textContent = !fc
-      ? 'Реальний вітер — з прогнозу за місцем: візьми його в «Розрахунку» (Вітер → Прогноз за місцем).'
-      : realOn()
-        ? `Прогноз ${age.text}${age.stale ? ' — застарів, онови в «Розрахунку»' : ''}: на ${state.height} м ${fmt(state.wind)} м/с, пориви до ${fmt(gst.peak)}. Годинник задає лише, звідки дме відносно носа.`
-        : `Є прогноз (${age.text}) — «Реальний» візьме з нього силу, профіль по висоті й пориви.`;
   }
 
   new ResizeObserver(resize).observe(cv);
@@ -1026,7 +1022,14 @@ export function initSim({ loads, loadById }) {
       fc = loadFc();
       paintLoads();
       if (!renewPanel.hidden) paintRenew();
-      changed();
+      // Висоту могли змінити в «Розрахунку» — кадр перебудовуємо, цілі лишаються на землі
+      if (cond.height !== shownH) {
+        shownH = cond.height;
+        ppm = side / spanM();
+        ground = null;
+        clampReticle();
+        settleView(true);
+      } else changed();
       resize();
     },
   };

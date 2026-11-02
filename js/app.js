@@ -1,13 +1,13 @@
 import { solve, simulate, windVector, meanWind, levelWind, scatter, gustStats } from './ballistics.js';
-import { TERRAINS, GUSTS, REFS, z0Of, windSpec, clockOf } from './wind.js';
+import { TERRAINS, GUSTS, REFS, z0Of, clockOf } from './wind.js';
 import { LEVELS, parseCoords, coarse, fetchForecast, loadFc, saveFc, fcAge } from './forecast.js';
 import { $, el, fmt, num, read, write, arrowHead, clockWord, where } from './ui.js';
 import { windPicker } from './wind-pick.js';
 import { initSim } from './sim.js';
 import { renderSettings } from './settings.js';
 import { WARHEADS, warhead, charge, radii, describe } from './warhead.js';
+import { cond, saveCond, fcUsed, condParams } from './cond.js';
 
-const KEY = 'pustelha:calc';
 const LOADS_KEY = 'pustelha:loads';
 
 // Умовні вантажі для прототипу — не реальні вироби; по одному на тип БЧ
@@ -16,15 +16,12 @@ const PRESETS = [
   { id: 'c1', name: 'Умовний фугасний 1 кг', mass: 1, diameter: 70, cd: 0.5, type: 'he', ex: 0.5 },
   { id: 'c2', name: 'Умовний кумулятивний 2 кг', mass: 2, diameter: 100, cd: 0.45, type: 'heat', ex: 0.6 },
 ];
-const DEFAULTS = {
-  height: 100, speed: 0, delay: 0, wind: 4, clock: 3, tempC: 15, elevation: 150, load: 'c1',
-  src: 'hand', ref: 'drone', terrain: 'open', gusts: 'mid', heading: 0, meas: 0, measAt: 'drone', pos: '',
-};
 const TABLE_HEIGHTS = [25, 50, 75, 100, 150, 200, 250, 300];
 
-const state = { ...DEFAULTS, ...read(KEY, {}) };
+// Умови скиду — спільні з тренажером (cond.js); тут їх задають
+const state = cond;
 let custom = read(LOADS_KEY, []);
-const save = () => write(KEY, state);
+const save = saveCond;
 const saveLoads = () => write(LOADS_KEY, custom);
 
 /* --- повзунок + число --- */
@@ -264,16 +261,9 @@ function bindAir() {
 }
 
 /* --- розрахунок і розбір --- */
-const fcOn = () => state.src === 'fc' && !!fc;
+const fcOn = () => fcUsed(fc);
 // Повітря — з прогнозу, якщо він увімкнений (температура й тиск), інакше з полів «Повітря»
-const params = (height = state.height) => ({
-  height,
-  speed: state.speed,
-  delay: state.delay,
-  tempC: state.tempC,
-  elevation: state.elevation,
-  ...windSpec(state, state.height, fcOn() ? fc : null),
-});
+const params = (height = state.height) => condParams(fc, { height });
 
 /** Вітер на висоті z словами для дрона: сила і година «звідки» відносно носа. */
 function windAt(s, z) {
@@ -294,7 +284,8 @@ function render() {
   const out = $('result');
   const load = currentLoad();
   if (!(load.mass > 0 && load.diameter > 0 && load.cd >= 0) || !(state.height > 0)) {
-    out.replaceChildren(el('p', { class: 'error' }, 'Перевір висоту і параметри вантажу — розрахунку немає.'));
+    $('calc-top').replaceChildren(el('p', { class: 'error' }, 'Перевір висоту і параметри вантажу — розрахунку немає.'));
+    out.replaceChildren();
     return;
   }
   const s = params();
@@ -325,15 +316,16 @@ function render() {
   lines.push(el('li', {}, `Бойова частина: ${describe(load)} від краю цілі.`));
   lines.push(el('li', { class: 'small muted' }, 'Точка під дроном = центр кадру, лише коли камера дивиться строго вниз (−90°). Як саме рахуємо — «Налаштування» → «Як рахуємо».'));
 
-  out.replaceChildren(
-    el('h2', {}, 'Куди впаде'),
-    el('div', { class: 'stats' },
-      stat('Точка падіння', fmt(dist), 'м', dist >= 0.05 ? where(r.x, r.y) : 'під дроном', 'hit'),
-      stat('Час падіння', fmt(r.time), 'с', `з ${fmt(state.height, 0)} м`),
-      stat('Знесення вітром', fmt(driftLen), 'м', wTop.speed > 0.05 ? `${fmt(wTop.speed)} м/с, ${clockWord(wTop.clock)}` : 'без вітру'),
-      stat('Швидкість удару', fmt(r.impactSpeed, 0), 'м/с', `${fmt(r.impactAngle, 0)}° від вертикалі · гранична ${fmt(r.vt, 0)} м/с`),
-      el('div', { class: 'stat wide', id: 'sc-tile' }, el('div', { class: 'stat-label' }, 'Розкид від поривів'), el('div', { class: 'stat-value' }, '…'))),
+  // Угорі, липким, як кадр у тренажері: схема й головні числа; під ним — умови кнопками, ще нижче — розбір
+  $('calc-top').replaceChildren(
     plan(r, wTop),
+    el('div', { class: 'stats mini' },
+      stat('Куди впаде', fmt(dist), 'м', dist >= 0.05 ? where(r.x, r.y) : 'під дроном', 'hit'),
+      stat('Падає', fmt(r.time), 'с', `з ${fmt(state.height, 0)} м`),
+      stat('Знесе вітер', fmt(driftLen), 'м', wTop.speed > 0.05 ? `${fmt(wTop.speed)} м/с` : 'без вітру'),
+      el('div', { class: 'stat', id: 'sc-tile' }, el('div', { class: 'stat-label' }, 'Розкид'), el('div', { class: 'stat-value' }, '…'))));
+  lines.splice(1, 0, el('li', {}, `Удар — ${fmt(r.impactAngle, 0)}° від вертикалі; гранична швидкість цього вантажу ${fmt(r.vt, 0)} м/с.`));
+  out.replaceChildren(
     el('ul', { class: 'explain' }, lines),
     el('fieldset', { class: 'box' }, el('legend', {}, 'За висотою'), heightTable(load)));
   scheduleScatter();
@@ -434,13 +426,13 @@ function paintScatter() {
   const g = sc.g;
   const line = $('sc-line');
   if (!(sc.r90 > 0)) {
-    tile.replaceChildren(el('div', { class: 'stat-label' }, 'Розкид від поривів'), el('div', { class: 'stat-value' }, '0', el('small', {}, 'м')),
-      el('div', { class: 'stat-sub' }, 'пориви вимкнено або штиль'));
+    tile.replaceChildren(el('div', { class: 'stat-label' }, 'Розкид'), el('div', { class: 'stat-value' }, '0', el('small', {}, 'м')),
+      el('div', { class: 'stat-sub' }, 'без поривів'));
     line?.remove();
   } else {
-    tile.replaceChildren(el('div', { class: 'stat-label' }, 'Розкид від поривів'),
-      el('div', { class: 'stat-value' }, fmt(sc.r50), el('small', {}, 'м'), el('span', { class: 'stat-sep' }, ' / '), fmt(sc.r90), el('small', {}, 'м')),
-      el('div', { class: 'stat-sub' }, `половина скидів — у колі ${fmt(sc.r50)} м навколо точки, 9 з 10 — у ${fmt(sc.r90)} м · пориви до ${fmt(g.peak)} м/с`));
+    tile.replaceChildren(el('div', { class: 'stat-label' }, 'Розкид'),
+      el('div', { class: 'stat-value' }, fmt(sc.r50), el('span', { class: 'stat-sep' }, '/'), fmt(sc.r90), el('small', {}, 'м')),
+      el('div', { class: 'stat-sub' }, '50 % / 90 % скидів'));
     if (line) {
       line.textContent = `Пориви: вітер на висоті скиду гуляє ±${fmt(g.su)} м/с (до ${fmt(g.peak)} м/с), один порив тримається ≈ ${fmt(g.T, 0)} с. `
         + `Тому навіть ідеальний скид ляже не в точку, а в коло ${fmt(sc.r50)} м для половини скидів і ${fmt(sc.r90)} м для 9 з 10. `
@@ -500,8 +492,46 @@ function paintStatic() {
   $('speed-hint').textContent = state.speed ? '' : '· зависання';
   for (const k of ['tempC', 'elevation']) $(`f-${k}`).disabled = on;
   $('air-sum').textContent = on
-    ? `· з прогнозу: ${fmt(fc.tempC, 0)} °C, ${fmt(fc.pressure, 0)} гПа`
-    : `· ${fmt(state.tempC, 0)} °C, ${fmt(state.elevation, 0)} м над морем`;
+    ? `Повітря з прогнозу: ${fmt(fc.tempC, 0)} °C, ${fmt(fc.pressure, 0)} гПа — поля вище не діють.`
+    : 'Холодне й низинне повітря щільніше — гальмує вантаж сильніше.';
+  // На кнопках умов — коротко, що зараз стоїть
+  $('ct-drop').textContent = `${fmt(state.height, 0)} м · ${state.speed ? `${fmt(state.speed)} м/с` : 'висить'}`;
+  $('ct-wind').textContent = w.speed > 0.05 ? `${fmt(w.speed)} м/с${on ? ' · прогноз' : ''}` : 'штиль';
+  $('ct-load').textContent = currentLoad().name;
+  $('ct-air').textContent = on ? `${fmt(fc.tempC, 0)} °C · прогноз` : `${fmt(state.tempC, 0)} °C · ${fmt(state.elevation, 0)} м`;
+  for (const b of document.querySelectorAll('.calc-tool')) b.classList.toggle('hot', b.dataset.key === 'wind' && w.speed > 0.05);
+}
+
+/* --- умови кнопками: тап відкриває панель під ними, одна за раз --- */
+const OPEN_KEY = 'pustelha:calc-open';
+function openPanel(key, scroll = false) {
+  for (const b of document.querySelectorAll('.calc-tool')) {
+    const on = b.dataset.key === key;
+    b.setAttribute('aria-expanded', String(on));
+    $(b.dataset.panel).hidden = !on;
+  }
+  write(OPEN_KEY, key || '');
+  // З тренажера — одразу до потрібної панелі, під липкою схемою
+  if (key && scroll) $(`cp-${key}`).scrollIntoView({ block: 'start', behavior: 'smooth' });
+}
+function bindTools() {
+  for (const b of document.querySelectorAll('.calc-tool')) {
+    b.addEventListener('click', () => openPanel(b.getAttribute('aria-expanded') === 'true' ? '' : b.dataset.key));
+  }
+  openPanel(read(OPEN_KEY, ''));
+}
+
+/** Поля — з умов: тренажер міг змінити висоту чи вітер, поки «Розрахунок» був схований. */
+function syncForm() {
+  for (const field of document.querySelectorAll('.field[data-key]')) {
+    const k = field.dataset.key;
+    $(`r-${k}`).value = $(`f-${k}`).value = state[k];
+  }
+  for (const k of ['heading', 'meas']) $(`f-${k}`).value = state[k] || '';
+  for (const k of ['tempC', 'elevation']) $(`f-${k}`).value = state[k];
+  $('fc-pos').value = state.pos;
+  fc = loadFc();
+  paintLoads();
 }
 
 function registerSW() {
@@ -530,10 +560,10 @@ function registerSW() {
   });
 }
 
-/* --- розділи в нижній панелі: тренажер, розрахунок, налаштування --- */
+/* --- розділи в нижній панелі: розрахунок, тренажер, налаштування --- */
 const TAB_KEY = 'pustelha:tab';
 let sim = null;
-let tabNow = 'sim';
+let tabNow = null;
 // Перейшов в інший розділ — його значок у нижній панелі пару секунд грає свою анімацію; при старті — ні
 let tabPlay = 0;
 function playTab(tab) {
@@ -557,8 +587,15 @@ function showTab(tab, { play = true } = {}) {
   // Налаштування — не стартовий розділ: після перезапуску відкриваємо той, де тренувався
   if (tab !== 'set') write(TAB_KEY, tab);
   if (tab === 'set') renderSettings($('pane-set'));
+  // Тренажер міг змінити висоту чи вітер — поля й розрахунок наздоганяють
+  if (tab === 'calc') { syncForm(); changed(); }
   if (tab === 'sim') {
-    sim ??= initSim({ loads: allLoads, loadById: (id) => allLoads().find((l) => l.id === id) || PRESETS[1] });
+    sim ??= initSim({
+      loads: allLoads,
+      loadById: (id) => allLoads().find((l) => l.id === id) || PRESETS[1],
+      // Умови в тренажері лише показані: тап по них — сюди, до потрібної панелі
+      openCalc: (key) => { showTab('calc'); openPanel(key, true); },
+    });
     sim.show();
   }
 }
@@ -569,10 +606,12 @@ bindPairs();
 bindWind();
 bindLoads();
 bindAir();
+bindTools();
 paintLoads();
 paintStatic();
 render();
-showTab(read(TAB_KEY, 'sim') === 'calc' ? 'calc' : 'sim', { play: false });
+// Перший запуск — «Розрахунок»: спершу умови, потім тренування в них
+showTab(read(TAB_KEY, 'calc') === 'sim' ? 'sim' : 'calc', { play: false });
 registerSW();
 // Мобільний Chrome то показує, то ховає адресний рядок: видима частина екрана нижча за сторінку, і нижня панель
 // опиняється під краєм — піднімаємо її на цю різницю. Великий відступ (клавіатура) ігноруємо
