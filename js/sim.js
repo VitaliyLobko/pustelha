@@ -1,9 +1,9 @@
 // Тренажер скиду: вид з камери вниз, приціл — точка під дроном, тягнеться пальцем; цілі поки квадратами.
 import { simulate, gustStats, gustSeries, gustStep, gustStart, CALM_GUST, gaussian, meanWind, scatterSliced } from './ballistics.js';
 import { loadFc } from './forecast.js';
-import { $, el, fmt, read, write, vibrate, where, wheelStrip } from './ui.js';
+import { $, el, fmt, read, write, vibrate, where, wheelStrip, lead, fact } from './ui.js';
 import { RENEW_MODES, RENEW_NOTE, renewPref, setRenew } from './settings.js';
-import { WARHEADS, warhead, radii, effect, whyNot, describe } from './warhead.js';
+import { WARHEADS, warhead, radii, charge, effect, whyNot, describe, zones } from './warhead.js';
 import { cond, saveCond, fcUsed, condParams } from './cond.js';
 
 const KEY = 'pustelha:sim';
@@ -566,46 +566,48 @@ export function initSim({ loads, loadById, openCalc }) {
   function paintOut() {
     const out = $('sim-out');
     const L = round?.last;
-    const rows = [];
-    const row = (k, v, cls = '') => el('div', { class: cls }, el('span', { class: 'k' }, k), v);
+    const parts = [];
+    // Угорі — висновок скиду великим; під ним — чому так, рядками з числом праворуч
     if (!L) {
-      rows.push(row('Як', 'тягни приціл пальцем на ціль і тисни «Скид»'));
+      parts.push(lead('Як скидати', 'Тягни приціл на ціль і тисни «Скид»', 'Вантаж падає в реальному часі — по рухомій цілі бери упередження.', 'idle'));
     } else if (!L.best) {
-      rows.push(row(`Скид ${L.no}`, el('span', { class: 'v' }, 'цілей не лишилось')));
+      parts.push(lead(`Скид ${L.no}`, 'Цілей не лишилось', null, 'idle'));
     } else if (L.killed) {
       const name = round.kind.name.toLowerCase();
-      rows.push(row(`Скид ${L.no}`, el('span', {},
-        el('span', { class: 'v good' }, L.killed > 1 ? `уражено ${L.killed} — ${name}` : `уражено — ${name}`),
-        L.wounded ? ` · ще ${L.wounded} у зоні поранення` : '')));
+      parts.push(lead(`Скид ${L.no}`, L.killed > 1 ? `Уражено ${L.killed} — ${name}` : `Уражено — ${name}`,
+        L.wounded ? `ще ${L.wounded} у зоні поранення` : null, 'good'));
     } else if (L.direct) {
-      rows.push(row(`Скид ${L.no}`, el('span', {}, el('span', { class: 'v bad' }, 'пряме влучання без ураження'), ` — ${L.why}`)));
+      parts.push(lead(`Скид ${L.no}`, 'Пряме влучання без ураження', L.why, 'bad'));
     } else {
       const zone = L.eff === 'radius'
-        ? (L.best.d <= L.R.wound ? ` — у зоні поранення, ураження лише до ${fmt(L.R.kill)} м` : ` — поза зоною ураження ${fmt(L.R.kill)} м`)
-        : L.eff === 'direct' ? ' — по цій цілі потрібне пряме влучання' : ' — і пряме не допомогло б, див. «БЧ»';
-      rows.push(row(`Скид ${L.no}`, el('span', {}, el('span', { class: 'v bad' }, `промах ${fmt(L.best.d)} м`),
-        ` до краю · ${where(L.best.dn, L.best.de, ['вище', 'нижче'])} від центру цілі${zone}`)));
+        ? (L.best.d <= L.R.wound ? `У зоні поранення, ураження — лише до ${fmt(L.R.kill)} м.` : `Поза зоною ураження ${fmt(L.R.kill)} м.`)
+        : L.eff === 'direct' ? 'По цій цілі потрібне пряме влучання.' : 'І пряме не допомогло б — див. «БЧ».';
+      parts.push(lead(`Скид ${L.no}`, `Промах ${fmt(L.best.d)} м до краю`,
+        `${where(L.best.dn, L.best.de, ['вище', 'нижче'])} від центру цілі. ${zone}`, 'bad'));
     }
+    const facts = [];
     if (L) {
-      rows.push(row('Падав', `${fmt(L.T)} с${L.delay ? ` + затримка ${fmt(L.delay, 2)} с` : ''} · вітер зніс ${fmt(L.drift)} м${L.drift >= 0.05 ? ` (${where(L.dx, L.dy, ['вгору', 'вниз'])})` : ''}`));
+      facts.push(fact('Падав', `${fmt(L.T)} с`, L.delay ? `+ затримка скиду ${fmt(L.delay, 2)} с` : null));
+      facts.push(fact('Вітер зніс', L.drift >= 0.05 ? `${fmt(L.drift)} м` : '< 5 см',
+        L.drift >= 0.05 ? where(L.dx, L.dy, ['вгору', 'вниз']) : null, 'wind'));
       if (L.wMean > 0.05 || Math.abs(L.k) > 0) {
-        rows.push(row('Вітер', `у момент скиду ${fmt(L.wNow)} м/с, середній ${fmt(L.wMean)}${L.k > 1 ? ' — скинув у порив' : L.k < -1 ? ' — скинув у затишшя' : ''}`));
+        facts.push(fact('Вітер при скиді', `${fmt(L.wNow)} м/с`,
+          `середній ${fmt(L.wMean)} м/с${L.k > 1 ? ' — скинув у порив' : L.k < -1 ? ' — скинув у затишшя' : ''}`, 'wind'));
       }
-      if (state.move) rows.push(row('Ціль', `за цей час пройшла ${fmt(state.move * (L.T + (L.delay || 0)))} м — бери упередження по ходу руху`));
+      if (state.move) facts.push(fact('Ціль пройшла', `${fmt(state.move * (L.T + (L.delay || 0)))} м`, 'бери упередження по ходу руху', 'carry'));
     }
     if (round) {
       const ld = loadById(cond.load), icon = round.kind.icon, eff = effect(ld, icon);
-      const wh = warhead(ld).name.toLowerCase();
-      rows.push(row('БЧ', eff === 'radius' ? describe(ld)
-        : eff === 'direct' ? `${wh} · по цілі «${round.kind.name}» — лише пряме влучання` : `${wh} · ${whyNot(ld, icon)}`));
+      facts.push(fact('БЧ', warhead(ld).name, eff === 'radius' ? [`ВР ${fmt(charge(ld), 2)} кг, від краю цілі${radii(ld).manual ? ' (задані вручну)' : ''} `, zones(ld)]
+        : eff === 'direct' ? `по цілі «${round.kind.name}» — лише пряме влучання` : whyNot(ld, icon), 'kill'));
     }
     if (state.hint && hint) {
       const d = Math.hypot(hint.x, hint.y);
-      rows.push(row('Підказка', `${d >= 0.05 ? `впаде ${where(hint.x, hint.y, ['вище', 'нижче'])} від прицілу` : 'впаде під приціл'} — синє кільце${
-        effect(loadById(cond.load), round.kind.icon) === 'radius' ? ' розміром із зону ураження' : ''}${
-        hintSc?.r50 > 0.05 ? `; через пориви половина скидів — у блакитній плямі ≈ ${fmt(hintSc.r50)} м` : ''}`, 'fx'));
+      facts.push(fact('Підказка', d >= 0.05 ? where(hint.x, hint.y, ['вище', 'нижче']) : 'під приціл',
+        `від прицілу — синє кільце${effect(loadById(cond.load), round.kind.icon) === 'radius' ? ' розміром із зону ураження' : ''}${
+          hintSc?.r50 > 0.05 ? `; через пориви половина скидів — у блакитній плямі ≈ ${fmt(hintSc.r50)} м` : ''}`, 'hint'));
     }
-    out.replaceChildren(...rows);
+    out.replaceChildren(...parts, facts.length ? el('div', { class: 'facts' }, facts) : '');
   }
 
   function paintScore() {

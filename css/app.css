@@ -109,6 +109,9 @@ button, input, select { font: inherit; color: inherit; }
 .set-pane p { margin: 0; }
 /* Пояснення — текст на всю ширину, без відступу під іконку */
 .how .set-pane { gap: 10px; padding-left: 12px; line-height: 1.45; }
+/* Таблиці в «Як рахуємо»: короткі, змішані текст і числа — усе вліво */
+.how-table { font-size: 13px; }
+.table.how-table :is(th, td) { text-align: left; padding: 6px 8px 6px 0; vertical-align: top; }
 .about { padding: 6px 8px 10px; }
 .about h3 { margin: 0 0 4px; font-size: 17px; }
 .about p { margin: 0 0 6px; }
@@ -495,14 +498,8 @@ input[readonly] { color: var(--muted); background: transparent; }
 @keyframes drop-kick { 0%, 100% { transform: none; } 25% { transform: translateX(-3px); } }
 @keyframes drop-fly { from { transform: translateX(var(--from)); } to { transform: translateX(var(--fly)); } }
 
-/* Показання — моноширинним, як у Shooter's Log */
-.readout { display: grid; gap: 2px; padding-top: 8px; border-top: 1px solid var(--line); font: 15px/1.45 var(--mono); font-variant-numeric: tabular-nums; }
-.readout .k { font: 13px system-ui, sans-serif; color: var(--muted); }
-.readout .k::after { content: ': '; }
-.readout .v { font-weight: 650; color: var(--accent-2); }
-.readout .good { color: var(--good); }
-.readout .bad { color: var(--bad); }
-.readout .fx { color: var(--muted); font-size: 14px; }
+/* Показання під «Скид»: висновок карткою, під ним — рядки розбору (.lead, .facts — спільні з «Розрахунком») */
+.readout { display: grid; gap: 10px; padding-top: 12px; border-top: 1px solid var(--line); }
 
 /* --- розрахунок: угорі липким — схема й головні числа, під ними — умови кнопками, ще нижче — розбір --- */
 .calc-top { position: sticky; top: calc(env(safe-area-inset-top) + 8px); z-index: 3; display: grid;
@@ -628,17 +625,44 @@ input[readonly] { color: var(--muted); background: transparent; }
 .plan .wind-label { fill: var(--c-wind); font-size: 10px; font-weight: 700; }
 .plan .nose { fill: var(--muted); }
 
-.explain { margin: 12px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; font-size: 15px; }
-.explain li { padding-left: 14px; position: relative; }
-.explain li::before { content: ''; position: absolute; left: 0; top: .55em; width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
-.explain li.carry::before { background: var(--c-carry); }
-.explain li.wind::before { background: var(--c-wind); }
-.explain li.aim { font-weight: 650; }
-.explain li.aim::before { background: var(--c-hit); }
+/* Висновок одним реченням: що робити чи що вийшло — крупно, пояснення під ним */
+.lead { padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.lead-k { font-size: 13px; color: var(--muted); }
+.lead-v { margin-top: 2px; font-size: 19px; font-weight: 750; line-height: 1.3; font-variant-numeric: tabular-nums; }
+.lead-s { margin-top: 4px; font-size: 14px; line-height: 1.4; color: var(--muted); }
+.lead.hit { border-color: color-mix(in srgb, var(--c-hit) 45%, var(--line)); background: color-mix(in srgb, var(--c-hit) 8%, var(--surface)); }
+.lead.good { border-color: color-mix(in srgb, var(--good) 50%, var(--line)); background: color-mix(in srgb, var(--good) 9%, var(--surface)); }
+.lead.good .lead-v { color: var(--good); }
+.lead.bad .lead-v { color: var(--bad); }
+.lead.idle { background: var(--surface-2); border-color: transparent; }
+.lead.idle .lead-v { font-size: 17px; }
+/* Розбір рядками: назва й пояснення ліворуч, число праворуч; кружечок — колір того самого на схемі й кадрі */
+.facts { display: grid; }
+.fact { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; column-gap: 12px; row-gap: 2px;
+  padding: 10px 2px 10px 18px; border-bottom: 1px solid var(--line-soft); }
+.fact:last-child { border-bottom: 0; }
+.fact::before { content: ''; position: absolute; left: 2px; top: 17px; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); opacity: .55; }
+.fact:is(.carry, .wind, .kill, .hint)::before { opacity: 1; }
+.fact.carry::before { background: var(--c-carry); }
+.fact.wind::before { background: var(--c-wind); }
+.fact.kill::before { background: var(--c-hit); }
+.fact.hint::before { background: none; box-shadow: inset 0 0 0 2px var(--c-wind); }
+.fact-k { font-size: 15px; font-weight: 600; }
+.fact-v { font-size: 17px; font-weight: 750; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.fact-s { grid-column: 1 / -1; font-size: 14px; line-height: 1.4; color: var(--muted); }
+/* Довге значення («22,0 м попереду і 1,2 м ліворуч») не влазить праворуч — переносимо під назву */
+.fact.hint .fact-v { white-space: normal; }
+.zones { display: inline-flex; flex-wrap: wrap; gap: 4px 10px; vertical-align: baseline; }
+.zone { white-space: nowrap; color: var(--text); }
+.zone::before { content: ''; display: inline-block; width: 9px; height: 9px; margin-right: 5px; border-radius: 50%; vertical-align: 0; }
+.zone.kill::before { background: var(--c-hit); }
+.zone.wound::before { background: var(--c-carry); }
+.result .facts { margin-top: 6px; }
+.result .foot { margin: 10px 0 16px; }
 
 .table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
 .table th { text-align: right; font-weight: 600; color: var(--muted); font-size: 12px; padding: 4px 6px; }
 .table td { text-align: right; padding: 7px 6px; border-top: 1px solid var(--line-soft); }
-.table th:first-child, .table td:first-child { text-align: left; }
+.table th:first-child, .table td:first-child { text-align: left; white-space: nowrap; }
 .table tr.cur td { color: var(--accent-2); font-weight: 700; }
 .error { color: var(--bad); }

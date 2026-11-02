@@ -1,11 +1,11 @@
 import { solve, simulate, meanWind, levelWind, scatterSliced, gustStats } from './ballistics.js';
 import { TERRAINS, GUSTS, GUSTS_FC, REFS, z0Of, clockOf, windSpec } from './wind.js';
 import { LEVELS, parseCoords, coarse, posText, fetchForecast, loadFc, saveFc, fcAge, fcSlot } from './forecast.js';
-import { $, el, fmt, num, read, write, arrowHead, clockWord, where, scrollMode } from './ui.js';
+import { $, el, fmt, num, read, write, arrowHead, clockWord, where, scrollMode, lead, fact } from './ui.js';
 import { windPicker } from './wind-pick.js';
 import { initSim } from './sim.js';
 import { renderSettings } from './settings.js';
-import { WARHEADS, warhead, charge, radii, describe } from './warhead.js';
+import { WARHEADS, warhead, charge, radii, formulaRadii, zones } from './warhead.js';
 import { cond, saveCond, fcUsed, condParams } from './cond.js';
 import { findPlaces } from './places.js';
 import { compassRose } from './compass.js';
@@ -222,6 +222,11 @@ function paintLoads() {
   $('l-ex').value = charge(load);
   $('l-ex').readOnly = preset;
   $('l-ex').classList.remove('invalid');
+  for (const k of ['kill', 'wound']) {
+    $(`l-${k}`).value = load[k] > 0 ? load[k] : '';
+    $(`l-${k}`).readOnly = preset;
+    $(`l-${k}`).classList.remove('invalid');
+  }
   paintWarhead(load);
   $('l-name-row').hidden = preset;
   $('l-name').value = load.name;
@@ -236,16 +241,21 @@ function paintLoads() {
 }
 
 function paintWarhead(load) {
-  const r = radii(load);
-  $('wh-note').textContent = warhead(load).id === 'heat'
-    ? `Кумулятивна пробиває броню лише прямим влучанням; по живій силі — як невеликий фугас: ураження ${fmt(r.kill)} м, поранення ${fmt(r.wound)} м.`
-    : `Від краю цілі: ураження ${fmt(r.kill)} м, поранення ${fmt(r.wound)} м. Радіус росте як ∛ маси ВР — удвічі більший заряд дає лише +26 %.`;
+  const r = radii(load), f = formulaRadii(load);
+  // Порожнє поле радіуса — значить «за формулою»: її число видно підказкою в полі
+  $('l-kill').placeholder = String(Math.round(f.kill * 10) / 10);
+  $('l-wound').placeholder = String(Math.round(f.wound * 10) / 10);
+  const zone = `ураження ${fmt(r.kill)} м, поранення ${fmt(r.wound)} м`;
+  $('wh-note').textContent = r.manual
+    ? `Від краю цілі: ${zone} — задано вручну. За формулою було б ${fmt(f.kill)} і ${fmt(f.wound)} м.`
+    : `${warhead(load).id === 'heat' ? 'Кумулятивна пробиває броню лише прямим влучанням; по живій силі — як невеликий фугас' : 'Від краю цілі'}: ${zone} `
+      + '— за формулою з маси ВР, корпус вона не знає: для важкого корпусу поранення занижує. Знаєш дані свого виробу — впиши радіуси.';
 }
 
 function addLoad(from) {
   const load = {
     id: `u${Date.now().toString(36)}`, name: from.name, mass: from.mass, diameter: from.diameter, cd: from.cd,
-    type: warhead(from).id, ex: charge(from),
+    type: warhead(from).id, ex: charge(from), kill: from.kill, wound: from.wound,
   };
   custom.push(load);
   state.load = load.id;
@@ -306,6 +316,22 @@ function bindLoads() {
     paintWarhead(load);
     changed();
   });
+  // Радіуси з даних виробу; порожньо — за формулою
+  for (const k of ['kill', 'wound']) {
+    $(`l-${k}`).addEventListener('input', (e) => {
+      const load = currentLoad();
+      if (isPreset(load)) return;
+      const t = e.target.value.trim();
+      const v = num(t);
+      const ok = !t || (Number.isFinite(v) && v > 0 && v <= 1000);
+      e.target.classList.toggle('invalid', !ok);
+      if (!ok) return;
+      if (t) load[k] = v; else delete load[k];
+      saveLoads();
+      paintWarhead(load);
+      changed();
+    });
+  }
   $('l-name').addEventListener('input', (e) => {
     const load = currentLoad();
     if (isPreset(load)) return;
@@ -379,26 +405,28 @@ function render() {
   const hover = !state.speed;
   const wTop = windAt(s, state.height), wLow = windAt(s, 2);
 
-  const lines = [
-    el('li', {}, `Падає ${fmt(r.time)} с, біля землі ${fmt(r.impactSpeed, 0)} м/с`
-      + (r.impactSpeed > 0.9 * r.vt ? ' — майже гранична швидкість, далі не розганяється.' : '.')),
+  // Розбір: спершу — куди цілитись, далі — з чого складається поправка, рядками з числом праворуч
+  const aim = dist < 0.1
+    ? lead('Як влучити', 'Скидай прямо над ціллю', 'Поправка менша за 10 см.', 'hit')
+    : hover
+      ? lead('Як влучити', `Зависни: ціль ${where(r.x, r.y)}`, 'від точки під дроном — дрон стоїть проти вітру від цілі.', 'hit')
+      : lead('Як влучити', `Ціль ${where(r.x, r.y)}`, 'від точки під дроном у момент скиду.', 'hit');
+  const facts = [
+    fact('Падає', `${fmt(r.time)} с`, `біля землі ${fmt(r.impactSpeed, 0)} м/с, удар ${fmt(r.impactAngle, 0)}° від вертикалі; `
+      + `гранична швидкість цього вантажу ${fmt(r.vt, 0)} м/с${r.impactSpeed > 0.9 * r.vt ? ' — майже досяг, далі не розганяється' : ''}`),
   ];
   if (!hover) {
-    const delayPart = state.delay ? ` (з них ${fmt(state.speed * state.delay)} м — затримка скиду)` : '';
-    lines.push(el('li', { class: 'carry' }, `Рух дрона ${fmt(state.speed)} м/с: вантаж летить вперед за інерцією і пролітає ${fmt(r.carry.x)} м${delayPart}.`));
+    facts.push(fact('Інерція — вперед', `${fmt(r.carry.x)} м`, `дрон летить ${fmt(state.speed)} м/с, вантаж зберігає цю швидкість${
+      state.delay ? `; з них ${fmt(state.speed * state.delay)} м — затримка скиду` : ''}`, 'carry'));
   }
   if (wTop.speed > 0.05) {
-    lines.push(el('li', { class: 'wind' }, `Вітер на ${fmt(state.height, 0)} м — ${fmt(wTop.speed)} м/с ${clockWord(wTop.clock)}, біля землі — ${fmt(wLow.speed)} м/с: `
-      + (driftLen >= 0.05 ? `за час падіння зносить на ${fmt(driftLen)} м (${where(r.drift.x, r.drift.y)}).` : 'майже не встигає знести — менше 5 см.')));
-    lines.push(el('li', { class: 'wind', id: 'sc-line' }, 'Рахую розкид від поривів…'));
+    facts.push(fact('Вітер зносить', driftLen >= 0.05 ? `${fmt(driftLen)} м` : '< 5 см',
+      `${fmt(wTop.speed)} м/с на ${fmt(state.height, 0)} м ${clockWord(wTop.clock)}, біля землі ${fmt(wLow.speed)} м/с${
+        driftLen >= 0.05 ? ` · ${where(r.drift.x, r.drift.y)}` : ''}`, 'wind'));
+    facts.push(fact('Розкид від поривів', '…', 'рахую', 'wind', 'sc-line'));
   }
-  lines.push(el('li', { class: 'aim' }, dist < 0.1
-    ? 'Скидай прямо над ціллю — поправка менша за 10 см.'
-    : hover
-      ? `Щоб влучити: зависни так, щоб ціль була ${where(r.x, r.y)} від точки під дроном — дрон стоїть проти вітру від цілі.`
-      : `Щоб влучити: у момент скиду ціль має бути ${where(r.x, r.y)} від точки під дроном.`));
-  lines.push(el('li', {}, `Бойова частина: ${describe(load)} від краю цілі.`));
-  lines.push(el('li', { class: 'small muted' }, 'Точка під дроном = центр кадру, лише коли камера дивиться строго вниз (−90°). Як саме рахуємо — «Налаштування» → «Як рахуємо».'));
+  facts.push(fact('БЧ', warhead(load).name,
+    [`ВР ${fmt(charge(load), 2)} кг, радіуси від краю цілі${radii(load).manual ? ' (задані вручну)' : ''} `, zones(load)], 'kill'));
 
   // Угорі, липким, як кадр у тренажері: схема й головні числа; під ним — умови кнопками, ще нижче — розбір
   $('calc-top').replaceChildren(
@@ -409,9 +437,10 @@ function render() {
       stat('Падає', fmt(r.time), 'с', `з ${fmt(state.height, 0)} м`),
       stat('Знесе вітер', fmt(driftLen), 'м', wTop.speed > 0.05 ? `${fmt(wTop.speed)} м/с` : 'без вітру'),
       el('div', { class: 'stat', id: 'sc-tile' }, el('div', { class: 'stat-label' }, 'Розкид'), el('div', { class: 'stat-value' }, '…'))));
-  lines.splice(1, 0, el('li', {}, `Удар — ${fmt(r.impactAngle, 0)}° від вертикалі; гранична швидкість цього вантажу ${fmt(r.vt, 0)} м/с.`));
   out.replaceChildren(
-    el('ul', { class: 'explain' }, lines),
+    aim,
+    el('div', { class: 'facts' }, facts),
+    el('p', { class: 'small muted foot' }, 'Точка під дроном = центр кадру, лише коли камера дивиться строго вниз (−90°). Як саме рахуємо — «Налаштування» → «Як рахуємо».'),
     el('fieldset', { class: 'box' }, el('legend', {}, 'За висотою'), heightTable()));
   scheduleScatter();
 }
@@ -515,14 +544,15 @@ function fillRow(tr, load) {
   const r = simulate(s, load, { dt: CALC_DT });
   const calm = simulate({ ...s, wind: 0, levels: null }, load, { dt: CALC_DT });
   const moving = state.speed > 0;
-  tr.replaceChildren(
+  // replaceChildren, на відміну від el(), пише null текстом — порожні колонки відкидаємо
+  tr.replaceChildren(...[
     el('td', {}, `${fmt(h, 0)} м`),
     el('td', {}, fmt(r.time)),
     moving ? el('td', {}, fmt(calm.x)) : null,
     el('td', {}, fmt(Math.hypot(r.x - calm.x, r.y - calm.y))),
     // При зависанні точка падіння = знесення вітром, окрема колонка зайва
     moving ? el('td', {}, fmt(Math.hypot(r.x, r.y))) : null,
-    el('td', { 'data-h': h }, '…'));
+    el('td', { 'data-h': h }, '…')].filter(Boolean));
 }
 
 /* --- важке (розкид — сотні скидів з поривами, таблиця за висотою) — після паузи у введенні й частинами,
@@ -578,11 +608,9 @@ async function paintScatter(gen) {
     tile.replaceChildren(el('div', { class: 'stat-label' }, 'Розкид'),
       el('div', { class: 'stat-value' }, fmt(sc.r50), el('span', { class: 'stat-sep' }, '/'), fmt(sc.r90), el('small', {}, 'м')),
       el('div', { class: 'stat-sub' }, '50 % / 90 % скидів'));
-    if (line) {
-      line.textContent = `Пориви: вітер на висоті скиду гуляє ±${fmt(g.su)} м/с (до ${fmt(g.peak)} м/с), один порив тримається ≈ ${fmt(g.T, 0)} с. `
-        + `Тому навіть ідеальний скид ляже не в точку, а в коло ${fmt(sc.r50)} м для половини скидів і ${fmt(sc.r90)} м для 9 з 10. `
-        + 'Скидай, коли вітер на дроні близький до середнього, — не в порив і не в затишшя.';
-    }
+    line?.replaceWith(fact('Розкид від поривів', `${fmt(sc.r50)} / ${fmt(sc.r90)} м`,
+      `коло для половини / 9 з 10 скидів: вітер гуляє ±${fmt(g.su)} м/с (до ${fmt(g.peak)}), порив ≈ ${fmt(g.T, 0)} с. `
+      + 'Скидай, коли вітер на дроні близький до середнього, — не в порив і не в затишшя', 'wind', 'sc-line'));
     const P = planMap;
     const box = $('plan-sc');
     if (P && box) {
@@ -739,7 +767,7 @@ function showTab(tab, { play = true } = {}) {
   $('pane-set').hidden = tab !== 'set';
   // Налаштування — не стартовий розділ: після перезапуску відкриваємо той, де тренувався
   if (tab !== 'set') write(TAB_KEY, tab);
-  if (tab === 'set') renderSettings($('pane-set'));
+  if (tab === 'set') renderSettings($('pane-set'), PRESETS);
   // Тренажер міг змінити висоту чи вітер — поля й розрахунок наздоганяють
   if (tab === 'calc') { syncForm(); changed(); }
   if (tab === 'sim') {

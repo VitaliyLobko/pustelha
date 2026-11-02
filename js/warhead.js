@@ -1,5 +1,5 @@
 // Бойова частина: тип і маса ВР → радіуси ураження. Закон подібності вибуху: радіус росте як ∛ маси ВР у тротиловому еквіваленті.
-import { fmt } from './ui.js';
+import { el, fmt } from './ui.js';
 
 // kill / wound — коефіцієнти при ∛W (м/кг^⅓): суцільне ураження і поранення/контузія живої сили на відкритій місцевості.
 // Фугас: ≈ 2∛W — смертельний надлишковий тиск, ≈ 4∛W — контузія. Осколкова: ≈ 20∛W — під ВОГ-17 (≈ 36 г ВР, радіус ≈ 7 м).
@@ -14,14 +14,23 @@ export const warhead = (load) => WARHEADS.find((w) => w.id === load.type) || WAR
 /** Маса ВР: у старих власних вантажах її ще немає — 40 % маси, як у типового фугасу. */
 export const charge = (load) => (load.ex > 0 ? load.ex : Math.round(load.mass * 40) / 100);
 
-/** Радіуси від краю цілі, м. */
-export function radii(load) {
+/** Радіуси за формулою (∛ маси ВР), м — без урахування корпусу. */
+export function formulaRadii(load) {
   const w = warhead(load), c = Math.cbrt(charge(load));
   return { kill: w.kill * c, wound: w.wound * c };
 }
 
+/** Радіуси від краю цілі, м: задані вручну з даних виробу або за формулою; manual — хоч один заданий. */
+export function radii(load) {
+  const f = formulaRadii(load);
+  const kill = load.kill > 0 ? load.kill : f.kill;
+  // Поранення не менше за ураження: інакше червоне коло вилізло б за помаранчеве
+  const wound = Math.max(kill, load.wound > 0 ? load.wound : f.wound);
+  return { kill, wound, manual: load.kill > 0 || load.wound > 0 };
+}
+
 // Що бере ціль: radius — уражає в радіусі; direct — лише пряме влучання; none — не бере зовсім
-const EFFECT = {
+export const EFFECT = {
   inf: { frag: 'radius', he: 'radius', heat: 'radius' },
   mech: { frag: 'none', he: 'direct', heat: 'direct' },
   armor: { frag: 'none', he: 'none', heat: 'direct' },
@@ -40,4 +49,12 @@ export const whyNot = (load, icon) => WHY_NOT[`${warhead(load).id}:${icon}`] || 
 export function describe(load) {
   const r = radii(load);
   return `${warhead(load).name.toLowerCase()} · ВР ${fmt(charge(load), 2)} кг · ураження ${fmt(r.kill)} м, поранення ${fmt(r.wound)} м`;
+}
+
+/** Зони кружечками — тими ж кольорами, що кола останнього скиду на кадрі тренажера. */
+export function zones(load) {
+  const r = radii(load);
+  return el('span', { class: 'zones' },
+    el('span', { class: 'zone kill' }, `ураження ${fmt(r.kill)} м`),
+    el('span', { class: 'zone wound' }, `поранення ${fmt(r.wound)} м`));
 }

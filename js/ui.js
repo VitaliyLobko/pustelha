@@ -139,3 +139,11 @@ export function where(x, y, [fwd, back] = ['попереду', 'позаду']) 
   if (Math.abs(y) >= 0.05) parts.push(`${fmt(Math.abs(y))} м ${y > 0 ? 'праворуч' : 'ліворуч'}`);
   return parts.join(' і ');
 }
+
+/** Головне одним реченням: мітка, крупний висновок, пояснення під ним; tone — hit | good | bad | idle. */
+export const lead = (k, v, sub, tone = '') => el('div', { class: `lead${tone ? ` ${tone}` : ''}` },
+  el('div', { class: 'lead-k' }, k), el('div', { class: 'lead-v' }, v), sub ? el('div', { class: 'lead-s' }, sub) : null);
+
+/** Рядок розбору: назва, число праворуч, пояснення під ними; tone — колір кружечка, як те саме на схемі. */
+export const fact = (k, v, sub, tone = '', id = null) => el('div', { class: `fact${tone ? ` ${tone}` : ''}`, id },
+  el('span', { class: 'fact-k' }, k), el('b', { class: 'fact-v' }, v), sub ? el('span', { class: 'fact-s' }, sub) : null);
