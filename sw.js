@@ -16,6 +16,7 @@ const ASSETS = [
   './js/cond.js',
   './js/map.js',
   './js/places.js',
+  './js/compass.js',
   './vendor/leaflet.js',
   './vendor/leaflet.css',
   './js/settings.js',

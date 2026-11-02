@@ -163,9 +163,11 @@
         </div>
         <p class="note">Місце — назвою населеного пункту, тапом на карті (кнопка з картою) або координатами. Назва й карта — з інтернету: сервіс пошуку бачить назву, сервер карти — яку місцевість ти переглядаєш. З Google Maps: довго натисни на місце → координати з’являться в рядку пошуку вгорі → натисни на них і скопіюй. Точне місце нікуди не йде: на пристрої воно огрублюється до ≈ 10 км, а запит іде на сітку з 25 точок у квадраті ≈ 110 × 70 км — сервер не знає, яка з них твоя.</p>
         <div id="fc-out" aria-live="polite"></div>
+        <div class="fc-ext"><span>Вітер на карті:</span><a class="btn" id="fc-windy" target="_blank" rel="noopener">Windy</a><a class="btn" id="fc-ventusky" target="_blank" rel="noopener">Ventusky</a></div>
+        <p class="note">Відкриються на вибраній клітинці, вітер на 100 м (висоту можна змінити там). Сервіс побачить це місце з точністю ≈ 10 км.</p>
         <div class="head-row">
           <label class="field"><span>Курс дрона — куди дивиться ніс, °</span><input type="number" id="f-heading" inputmode="decimal" min="0" max="359" step="5"></label>
-          <div class="chips compass" id="w-head" role="group" aria-label="Курс за сторонами світу"></div>
+          <div id="w-head"></div>
         </div>
         <p class="note">Курс — з компаса в застосунку дрона. Від нього залежить, звідки дме відносно носа: 0° — ніс на північ, 90° — на схід.</p>
         <label class="field meas-field"><span>Замір на місці, м/с</span><input type="number" id="f-meas" inputmode="decimal" min="0" step="0.5" placeholder="необов'язково"></label>

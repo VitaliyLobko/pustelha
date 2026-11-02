@@ -8,6 +8,7 @@ import { renderSettings } from './settings.js';
 import { WARHEADS, warhead, charge, radii, describe } from './warhead.js';
 import { cond, saveCond, fcUsed, condParams } from './cond.js';
 import { findPlaces } from './places.js';
+import { compassRose } from './compass.js';
 
 const LOADS_KEY = 'pustelha:loads';
 
@@ -56,7 +57,7 @@ function bindPairs() {
 
 /* --- вітер: вручну чи з прогнозу, місцевість, пориви --- */
 let fc = loadFc();
-const COMPASS = [[0, 'Пн'], [45, 'ПнСх'], [90, 'Сх'], [135, 'ПдСх'], [180, 'Пд'], [225, 'ПдЗх'], [270, 'Зх'], [315, 'ПнЗх']];
+let rose = null;
 const fieldVal = (k) => (k === 'heading' ? String(state.heading || 0) : state[k] ? String(state[k]) : '');
 /** Прогноз на вибрану годину; номер години — у межах того, що є в прогнозі. */
 const fcNow = () => {
@@ -70,11 +71,12 @@ function bindWind() {
     if (list) $(id).replaceChildren(...list.map(([v, label]) => el('button', { type: 'button', 'data-v': v }, label)));
     for (const b of $(id).querySelectorAll('button')) b.addEventListener('click', () => { state[key] = b.dataset.v; changed(); });
   }
-  // Курс — кнопками сторін світу або числом; 0 видно як «0», а не порожнім полем — інакше схоже на «не задано»
-  $('w-head').replaceChildren(...COMPASS.map(([deg, label]) => el('button', {
-    type: 'button', 'data-v': String(deg), title: `${deg}°`,
-    onclick: () => { state.heading = deg; $('f-heading').value = String(deg); $('f-heading').classList.remove('invalid'); changed(); },
-  }, label)));
+  // Курс — розою компаса або числом; 0 видно як «0», а не порожнім полем — інакше схоже на «не задано»
+  rose = compassRose({
+    get: () => state.heading || 0,
+    set: (deg) => { state.heading = deg; $('f-heading').value = String(deg); $('f-heading').classList.remove('invalid'); changed(); },
+  });
+  $('w-head').replaceChildren(rose.node);
   for (const [k, max] of [['heading', 359], ['meas', 40]]) {
     const input = $(`f-${k}`);
     input.value = fieldVal(k);
@@ -95,6 +97,19 @@ function bindWind() {
     if (p) { const c = coarse(p); state.pos = pos.value = posText(c); save(); }
   });
   $('fc-get').addEventListener('click', getForecast);
+  // Windy й Ventusky — на клітинці з поля місця; посилання складаємо в мить натискання, поле могло змінитись
+  const links = {
+    'fc-windy': (lat, lon) => `https://www.windy.com/?wind,100m,${lat},${lon},10`,
+    'fc-ventusky': (lat, lon) => `https://www.ventusky.com/?p=${lat};${lon};9&l=wind-100m`,
+  };
+  for (const [id, url] of Object.entries(links)) {
+    $(id).addEventListener('click', (e) => {
+      const p = parseCoords(pos.value);
+      if (!p) { e.preventDefault(); paintFc('Спершу вибери місце: назвою, на карті чи координатами.', 'warn'); return; }
+      const c = coarse(p);
+      e.currentTarget.href = url(c.lat.toFixed(1), c.lon.toFixed(1));
+    });
+  }
   // Карта вантажиться лише на вимогу: потрібна рідко, а підкладку тягне з мережі
   $('fc-map').addEventListener('click', async () => {
     const { openMap } = await import('./map.js');
@@ -558,7 +573,7 @@ function paintStatic() {
   $('w-ref-note').hidden = state.ref !== '2';
   $('w-terr').hidden = state.src === 'fc';
   $('w-meas-box').hidden = !(state.meas > 0);
-  for (const b of $('w-head').querySelectorAll('button')) b.classList.toggle('on', +b.dataset.v === (state.heading || 0));
+  rose?.paint();
   if (state.src === 'fc') paintFc(fc ? '' : 'Прогнозу ще немає: встав координати й натисни «Прогноз». Поки рахую з ручного вітру.');
   const s = params();
   const w = windAt(s, state.height), g = gustStats(s);

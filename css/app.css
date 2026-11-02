@@ -278,7 +278,20 @@ input[readonly] { color: var(--muted); background: transparent; }
 .calc-wind { margin-top: 6px; }
 /* Курс — числом і сторонами світу; година прогнозу — рядком кнопок */
 .head-row { display: grid; gap: 6px; margin-top: 12px; }
-.compass button { min-width: 52px; min-height: 34px; padding: 4px 8px; font-size: 13px; }
+.cr { display: grid; justify-items: center; gap: 2px; }
+.cr-rose { position: relative; width: min(220px, 64vw); aspect-ratio: 1; border-radius: 50%; touch-action: none; cursor: grab; }
+.cr-rose:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.cr-face svg { display: block; width: 100%; height: 100%; }
+.cr-ring { fill: var(--surface); stroke: var(--text); stroke-opacity: .55; stroke-width: .7; }
+.cr-tick { stroke: var(--muted); stroke-width: .6; }
+.cr-tick.cr-major { stroke: var(--text); stroke-width: 1; }
+.cr-side { fill: var(--text); font-size: 8.5px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+.cr-side.cr-north { fill: var(--bad); }
+.cr-needle line { stroke: var(--accent); stroke-width: 2.4; stroke-linecap: round; }
+.cr-needle path { fill: var(--accent); }
+.cr-hub { fill: var(--surface-2); stroke: var(--line); stroke-width: .7; }
+.cr-deg { fill: var(--text); font-size: 8px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+.cr-note { margin: 0; font-size: 14px; color: var(--muted); }
 .meas-field { margin-top: 12px; }
 .fc-hours { margin-bottom: 4px; }
 .fc-hours button { min-height: 34px; padding: 4px 10px; font: 600 13px var(--mono); }
@@ -510,6 +523,8 @@ input[readonly] { color: var(--muted); background: transparent; }
 /* Прогноз: поле координат з кнопкою, таблиця по висотах */
 .fc-row { display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-flow: column; grid-auto-columns: auto; gap: 8px; margin-bottom: 4px; }
 .fc-row .btn { min-height: 44px; }
+.fc-ext { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; font-size: 14px; color: var(--muted); }
+.fc-ext .btn { min-height: 40px; color: var(--text); text-decoration: none; }
 #fc-map { display: grid; place-items: center; width: 48px; padding: 0; }
 #fc-map svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
 
