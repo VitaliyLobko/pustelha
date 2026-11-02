@@ -1,4 +1,4 @@
-import { solve, simulate, windVector, meanWind, levelWind, scatter, gustStats } from './ballistics.js';
+import { solve, simulate, meanWind, levelWind, scatter, gustStats } from './ballistics.js';
 import { TERRAINS, GUSTS, REFS, z0Of, clockOf } from './wind.js';
 import { LEVELS, parseCoords, coarse, fetchForecast, loadFc, saveFc, fcAge } from './forecast.js';
 import { $, el, fmt, num, read, write, arrowHead, clockWord, where } from './ui.js';
@@ -270,7 +270,7 @@ function windAt(s, z) {
   const a = meanWind(s)(z);
   const speed = Math.hypot(a.x, a.y);
   const deg = (Math.atan2(-a.y, -a.x) * 180 / Math.PI + 360) % 360;
-  return { speed, clock: Math.round(deg / 30) % 12 || 12 };
+  return { speed, clock: Math.round(deg / 30) % 12 || 12, x: a.x, y: a.y };
 }
 
 function stat(label, value, unit, sub, cls = '') {
@@ -364,8 +364,8 @@ function plan(r, w) {
     el('svg:text', { class: 'hit-label', x: hx + (hx > 90 ? -14 : 14), y: hy + (hy < -140 ? 20 : -10), 'text-anchor': hx > 90 ? 'end' : 'start' }, `${fmt(Math.hypot(r.x, r.y))} м`));
   if (w.speed > 0.05) {
     // Куди рухається повітря на висоті скиду, у кутку схеми
-    const v = windVector(1, w.clock);
-    const dx = v.y, dy = -v.x;
+    // Точний напрям, а не округлений до години: з прогнозу вітер рідко дме рівно з «години»
+    const dx = w.y / w.speed, dy = -w.x / w.speed;
     const cx = -128, cy = 132;
     svg.append(el('svg:line', { class: 'wind', x1: cx - dx * 16, y1: cy - dy * 16, x2: cx + dx * 10, y2: cy + dy * 10 }),
       el('svg:path', { class: 'wind-head', d: arrowHead(cx + dx * 18, cy + dy * 18, dx, dy, 8) }),

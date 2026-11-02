@@ -991,7 +991,7 @@ export function initSim({ loads, loadById, openCalc }) {
     $('sim-tgt-v').textContent = k.name;
     // Сила — на висоті дрона: з прогнозу чи з профілю, а не задана біля землі
     const wm = Math.hypot(meanH.x, meanH.y);
-    $('sim-wind-v').textContent = wm >= 0.05 ? `${fmt(wm, wm < 10 ? 1 : 0)} м/с` : 'штиль';
+    $('sim-wind-v').textContent = wm >= 0.05 ? `${fmt(wm)} м/с` : 'штиль';
     $('sim-move-v').textContent = state.move ? (move().short || move().name) : 'стоїть';
     $('sim-tgt-ico').innerHTML = SYM(k.icon);
     let on = null;

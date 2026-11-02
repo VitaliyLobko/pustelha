@@ -442,19 +442,21 @@ input[readonly] { color: var(--muted); background: transparent; }
 
 /* --- розрахунок: угорі липким — схема й головні числа, під ними — умови кнопками, ще нижче — розбір --- */
 .calc-top { position: sticky; top: calc(env(safe-area-inset-top) + 8px); z-index: 3; display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; align-items: center; padding: 8px;
+  grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); gap: 6px; align-items: center; padding: 6px 8px 6px 4px;
   border: 1px solid var(--line); border-radius: 14px; background: var(--surface);
   /* Тінь кольору тла закриває смугу над блоком, щоб розбір не просвічував, коли прокручується під ним */
   box-shadow: 0 -10px 0 2px var(--bg); }
 .calc-top > .error { grid-column: 1 / -1; margin: 4px; }
-.calc-top .plan { max-width: 260px; }
+.calc-top .plan { max-width: 360px; }
 /* Схема в блоці дрібна — підписи більші, щоб читались */
 .calc-top .plan .ring-label { font-size: 17px; }
 .calc-top .plan :is(.nadir-label, .nose-label) { font-size: 17px; }
 .calc-top .plan .hit-label { font-size: 22px; }
 .calc-top .plan .wind-label { font-size: 19px; }
 .stats.mini { grid-template-columns: minmax(0, 1fr); gap: 5px; margin: 0; }
-.stats.mini .stat { padding: 5px 9px; border-radius: 10px; }
+.stats.mini .stat { padding: 5px 8px; border-radius: 10px; }
+/* Куди саме впаде — головне, тож рядок переноситься, а не обрізається */
+.stats.mini .stat.hit .stat-sub { white-space: normal; }
 .stats.mini .stat-label { font-size: 11px; }
 .stats.mini .stat-value { margin-top: 0; font-size: 17px; line-height: 1.15; }
 .stats.mini .stat-value small { font-size: 12px; }
