@@ -19,10 +19,13 @@ const refZ = (key, H) => (key === 'drone' ? H : +key || H);
 export function windSpec(st, H, fc) {
   const z0 = z0Of(st.terrain), gusty = gustyOf(st.gusts);
   if (st.src === 'fc' && fc) {
-    const spec = { levels: fc.levels, heading: st.heading || 0, gust10: fc.gust10, pressure: fc.pressure, tempC: fc.tempC, z0, gusty };
+    // Місцевість з прогнозом не потрібна: вище 10 м вітер дає модель, пориви — її «пориви до»; нижче 10 м і замір біля землі —
+    // як на відкритому місці
+    const open = z0Of('open');
+    const spec = { levels: fc.levels, heading: st.heading || 0, gust10: fc.gust10, pressure: fc.pressure, tempC: fc.tempC, z0: open, gusty };
     if (st.meas > 0) {
       // Форма профілю — з прогнозу, сила — з заміру на місці
-      const f = levelWind(fc.levels, refZ(st.measAt, H), z0).speed;
+      const f = levelWind(fc.levels, refZ(st.measAt, H), open).speed;
       if (f > 0.1) spec.scale = st.meas / f;
     }
     return spec;

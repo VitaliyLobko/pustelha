@@ -190,6 +190,8 @@ input[readonly] { color: var(--muted); background: transparent; }
   font-weight: 650;
 }
 .btn:active { transform: scale(.98); }
+.btn.primary { border-color: transparent; background: color-mix(in srgb, var(--accent) 80%, #000); color: #fff; }
+.btn:disabled { opacity: .45; cursor: default; transform: none; }
 .btn.danger { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 50%, var(--line)); }
 
 /* перемикач з двох-трьох варіантів */
@@ -274,6 +276,12 @@ input[readonly] { color: var(--muted); background: transparent; }
 .wp-quick small { font-size: 11px; color: var(--muted); }
 .wp-quick button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
 .calc-wind { margin-top: 6px; }
+/* Курс — числом і сторонами світу; година прогнозу — рядком кнопок */
+.head-row { display: grid; gap: 6px; margin-top: 12px; }
+.compass button { min-width: 52px; min-height: 34px; padding: 4px 8px; font-size: 13px; }
+.meas-field { margin-top: 12px; }
+.fc-hours { margin-bottom: 4px; }
+.fc-hours button { min-height: 34px; padding: 4px 10px; font: 600 13px var(--mono); }
 
 /* --- тренажер: кадр з камери, кнопки в кутах, під ним — налаштування й показання (розкладка з Shooter's Log) --- */
 .sim { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
@@ -478,6 +486,8 @@ input[readonly] { color: var(--muted); background: transparent; }
 .stats.mini .stat:not(.hit, #sc-tile) .stat-sub { display: none; }
 .calc-tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 12px; }
 .calc-panel { margin-top: 8px; }
+/* Затримка — спільна для всіх вантажів, тож відділена від полів вибраного */
+.load-common { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 .calc-panel > :first-child { margin-top: 0; }
 
 /* --- результат --- */
@@ -498,8 +508,36 @@ input[readonly] { color: var(--muted); background: transparent; }
 .plan .sc-50 { fill: color-mix(in srgb, var(--c-hit) 14%, transparent); stroke: var(--c-hit); stroke-width: 1.2; }
 .plan .sc-90 { fill: none; stroke: var(--c-hit); stroke-width: 1; stroke-dasharray: 4 3; opacity: .8; }
 /* Прогноз: поле координат з кнопкою, таблиця по висотах */
-.fc-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-bottom: 4px; }
+.fc-row { display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-flow: column; grid-auto-columns: auto; gap: 8px; margin-bottom: 4px; }
 .fc-row .btn { min-height: 44px; }
+#fc-map { display: grid; place-items: center; width: 48px; padding: 0; }
+#fc-map svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+
+/* --- карта вибору місця: на весь екран; список збігів пошуку — і тут, і під полем місця --- */
+.map-dlg { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; padding: 0; border: 0;
+  background: var(--surface); color: var(--text); display: none; grid-template-rows: auto 1fr auto; }
+.map-dlg[open] { display: grid; }
+.map-dlg::backdrop { background: rgb(0 0 0 / .5); }
+.map-top { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; padding: calc(env(safe-area-inset-top) + 8px) 12px 8px; }
+.map-top .btn, .map-q { min-height: 44px; }
+.map-x { width: 48px; padding: 0; font-size: 18px; }
+.place-list { margin: 0; padding: 4px; list-style: none; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.place-list[hidden] { display: none; }
+.place-list li.muted { padding: 10px; font-size: 14px; }
+.place-list button { display: flex; justify-content: space-between; gap: 10px; width: 100%; min-height: 44px; padding: 8px 10px; border: 0;
+  border-radius: 8px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.place-list button:hover, .place-list button:focus-visible { background: var(--surface-2); }
+.place-list span { color: var(--muted); font-size: 13px; text-align: right; }
+.map-list { position: absolute; z-index: 1100; left: 12px; right: 12px; top: calc(env(safe-area-inset-top) + 60px);
+  max-height: 60dvh; overflow: auto; box-shadow: 0 8px 24px rgb(0 0 0 / .3); }
+.map-wrap { position: relative; min-height: 0; }
+.map-box { position: absolute; inset: 0; background: var(--surface-2); cursor: crosshair; }
+.map-layers { position: absolute; z-index: 1000; top: 10px; right: 10px; box-shadow: 0 2px 8px rgb(0 0 0 / .3); }
+.map-layers button { flex: none; color: var(--text); }
+.map-bot { display: grid; gap: 8px; padding: 10px 12px calc(env(safe-area-inset-bottom) + 10px); border-top: 1px solid var(--line); }
+.map-cap { margin: 0; min-height: 2.6em; font-size: 14px; }
+.map-bot .actions { margin: 0; justify-content: flex-end; }
+.map-bot .actions .btn { min-height: 44px; }
 .fc-table { margin-top: 8px; }
 #w-terrain { margin-bottom: 2px; }
 #w-sum { color: var(--text); }

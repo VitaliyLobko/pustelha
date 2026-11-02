@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0c111a">
   <meta name="description" content="Розрахунок скиду з дрона: висота, вітер, вантаж — точка падіння і поправка">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://api.open-meteo.com">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://tile.openstreetmap.org https://server.arcgisonline.com; connect-src 'self' https://api.open-meteo.com https://nominatim.openstreetmap.org">
   <title>Пустельга</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
@@ -142,13 +142,6 @@
         <label for="f-speed">Швидкість дрона, м/с <span class="hint" id="speed-hint"></span></label>
         <div class="pair"><input type="range" id="r-speed"><input type="number" id="f-speed" inputmode="decimal"></div>
       </div>
-      <details class="more">
-        <summary>Додатково</summary>
-        <div class="field" data-key="delay" data-min="0" data-max="1" data-step="0.05">
-          <label for="f-delay">Затримка скиду, с <span class="hint">від натискання до відпускання; і в тренажері</span></label>
-          <div class="pair"><input type="range" id="r-delay"><input type="number" id="f-delay" inputmode="decimal"></div>
-        </div>
-      </details>
       </div>
       <div class="sim-panel calc-panel" id="cp-wind" hidden>
       <div class="seg" id="w-src">
@@ -156,28 +149,35 @@
         <button type="button" data-v="fc">Прогноз за місцем</button>
       </div>
       <div id="w-hand">
-        <div class="calc-wind" id="calc-wind"></div>
         <div class="label">Де виміряно</div>
         <div class="seg" id="w-ref"></div>
         <p class="note" id="w-ref-note" hidden>Біля землі міряй на відкритому місці — поляна, узбіччя, край поля, не серед дерев: там вітер гасять стволи й крони. На висоту перераховуємо як над полем, місцевість впливає лише на пориви.</p>
+        <div class="calc-wind" id="calc-wind"></div>
       </div>
       <div id="w-fc" hidden>
-        <label class="field" for="fc-pos"><span>Місце — координати чи посилання з Google Maps</span></label>
+        <label class="field" for="fc-pos"><span>Місце — назва, координати чи посилання з Google Maps</span></label>
         <div class="fc-row">
-          <input type="text" id="fc-pos" placeholder="48.51, 37.98" autocomplete="off" spellcheck="false">
+          <input type="text" id="fc-pos" placeholder="Покровськ або 48.51, 37.98" autocomplete="off" spellcheck="false">
+          <button type="button" class="btn" id="fc-map" aria-label="Вибрати на карті" title="Вибрати на карті"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/></svg></button>
           <button type="button" class="btn" id="fc-get">Прогноз</button>
         </div>
-        <p class="note">У Google Maps довго натисни на місце → цифри вгорі скопіюються → встав сюди. Точне місце нікуди не йде: на пристрої воно огрублюється до ≈ 10 км, а запит іде на сітку з 25 точок у квадраті ≈ 110 × 70 км — сервер не знає, яка з них твоя.</p>
+        <p class="note">Місце — назвою населеного пункту, тапом на карті (кнопка з картою) або координатами. Назва й карта — з інтернету: сервіс пошуку бачить назву, сервер карти — яку місцевість ти переглядаєш. З Google Maps: довго натисни на місце → координати з’являться в рядку пошуку вгорі → натисни на них і скопіюй. Точне місце нікуди не йде: на пристрої воно огрублюється до ≈ 10 км, а запит іде на сітку з 25 точок у квадраті ≈ 110 × 70 км — сервер не знає, яка з них твоя.</p>
         <div id="fc-out" aria-live="polite"></div>
-        <div class="load-grid two">
-          <label class="field"><span>Курс дрона — куди ніс, °</span><input type="number" id="f-heading" inputmode="decimal" min="0" max="359" step="5"></label>
-          <label class="field"><span>Замір на місці, м/с</span><input type="number" id="f-meas" inputmode="decimal" min="0" step="0.5" placeholder="необов'язково"></label>
+        <div class="head-row">
+          <label class="field"><span>Курс дрона — куди дивиться ніс, °</span><input type="number" id="f-heading" inputmode="decimal" min="0" max="359" step="5"></label>
+          <div class="chips compass" id="w-head" role="group" aria-label="Курс за сторонами світу"></div>
         </div>
-        <div class="label">Замір — де виміряно</div>
-        <div class="seg" id="w-meas-at"></div>
+        <p class="note">Курс — з компаса в застосунку дрона. Від нього залежить, звідки дме відносно носа: 0° — ніс на північ, 90° — на схід.</p>
+        <label class="field meas-field"><span>Замір на місці, м/с</span><input type="number" id="f-meas" inputmode="decimal" min="0" step="0.5" placeholder="необов'язково"></label>
+        <div id="w-meas-box" hidden>
+          <div class="label">Замір — де виміряно</div>
+          <div class="seg" id="w-meas-at"></div>
+        </div>
       </div>
-      <div class="label">Місцевість під дроном</div>
-      <div class="chips" id="w-terrain"></div>
+      <div id="w-terr">
+        <div class="label">Місцевість під дроном</div>
+        <div class="chips" id="w-terrain"></div>
+      </div>
       <div class="label">Пориви</div>
       <div class="seg" id="w-gust"></div>
       <p class="note" id="w-sum"></p>
@@ -197,6 +197,10 @@
       <label class="field" id="l-name-row"><span>Назва</span><input type="text" id="l-name" maxlength="40"></label>
       <p class="note" id="load-note"></p>
       <div class="actions" id="load-actions"></div>
+      <div class="field load-common" data-key="delay" data-min="0" data-max="1" data-step="0.05">
+        <label for="f-delay">Затримка скиду, с <span class="hint">— одна на всі вантажі: від натискання до відпускання; і в тренажері</span></label>
+        <div class="pair"><input type="range" id="r-delay"><input type="number" id="f-delay" inputmode="decimal"></div>
+      </div>
       </div>
       <div class="sim-panel calc-panel" id="cp-air" hidden>
       <div class="load-grid two">

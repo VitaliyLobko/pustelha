@@ -1,12 +1,13 @@
 import { solve, simulate, meanWind, levelWind, scatter, gustStats } from './ballistics.js';
-import { TERRAINS, GUSTS, REFS, z0Of, clockOf } from './wind.js';
-import { LEVELS, parseCoords, coarse, fetchForecast, loadFc, saveFc, fcAge } from './forecast.js';
+import { TERRAINS, GUSTS, REFS, z0Of, clockOf, windSpec } from './wind.js';
+import { LEVELS, parseCoords, coarse, posText, fetchForecast, loadFc, saveFc, fcAge, fcSlot } from './forecast.js';
 import { $, el, fmt, num, read, write, arrowHead, clockWord, where } from './ui.js';
 import { windPicker } from './wind-pick.js';
 import { initSim } from './sim.js';
 import { renderSettings } from './settings.js';
 import { WARHEADS, warhead, charge, radii, describe } from './warhead.js';
 import { cond, saveCond, fcUsed, condParams } from './cond.js';
+import { findPlaces } from './places.js';
 
 const LOADS_KEY = 'pustelha:loads';
 
@@ -55,15 +56,28 @@ function bindPairs() {
 
 /* --- вітер: вручну чи з прогнозу, місцевість, пориви --- */
 let fc = loadFc();
-const SEGS = [['w-src', 'src', null], ['w-ref', 'ref', REFS], ['w-meas-at', 'measAt', REFS], ['w-terrain', 'terrain', TERRAINS], ['w-gust', 'gusts', GUSTS]];
+const COMPASS = [[0, 'Пн'], [45, 'ПнСх'], [90, 'Сх'], [135, 'ПдСх'], [180, 'Пд'], [225, 'ПдЗх'], [270, 'Зх'], [315, 'ПнЗх']];
+const fieldVal = (k) => (k === 'heading' ? String(state.heading || 0) : state[k] ? String(state[k]) : '');
+/** Прогноз на вибрану годину; номер години — у межах того, що є в прогнозі. */
+const fcNow = () => {
+  const n = fc?.hours?.length || 1;
+  if (!(state.fcHour < n)) state.fcHour = 0;
+  return fcSlot(fc, state.fcHour);
+};
+const SEGS =[['w-src', 'src', null], ['w-ref', 'ref', REFS], ['w-meas-at', 'measAt', REFS], ['w-terrain', 'terrain', TERRAINS], ['w-gust', 'gusts', GUSTS]];
 function bindWind() {
   for (const [id, key, list] of SEGS) {
     if (list) $(id).replaceChildren(...list.map(([v, label]) => el('button', { type: 'button', 'data-v': v }, label)));
     for (const b of $(id).querySelectorAll('button')) b.addEventListener('click', () => { state[key] = b.dataset.v; changed(); });
   }
+  // Курс — кнопками сторін світу або числом; 0 видно як «0», а не порожнім полем — інакше схоже на «не задано»
+  $('w-head').replaceChildren(...COMPASS.map(([deg, label]) => el('button', {
+    type: 'button', 'data-v': String(deg), title: `${deg}°`,
+    onclick: () => { state.heading = deg; $('f-heading').value = String(deg); $('f-heading').classList.remove('invalid'); changed(); },
+  }, label)));
   for (const [k, max] of [['heading', 359], ['meas', 40]]) {
     const input = $(`f-${k}`);
-    input.value = state[k] || '';
+    input.value = fieldVal(k);
     input.addEventListener('input', () => {
       const v = input.value.trim() === '' ? 0 : num(input.value);
       const ok = Number.isFinite(v) && v >= 0 && v <= max;
@@ -78,19 +92,51 @@ function bindWind() {
   pos.addEventListener('change', () => {
     // Зберігаємо лише огрублене — точних координат на пристрої не лишається
     const p = parseCoords(pos.value);
-    if (p) { const c = coarse(p); state.pos = pos.value = `${c.lat}, ${c.lon}`; save(); }
+    if (p) { const c = coarse(p); state.pos = pos.value = posText(c); save(); }
   });
   $('fc-get').addEventListener('click', getForecast);
+  // Карта вантажиться лише на вимогу: потрібна рідко, а підкладку тягне з мережі
+  $('fc-map').addEventListener('click', async () => {
+    const { openMap } = await import('./map.js');
+    openMap({
+      start: parseCoords(pos.value),
+      onPick: (c, now) => {
+        state.pos = pos.value = posText(c);
+        save();
+        if (now) getForecast();
+      },
+    });
+  });
 }
 
 async function getForecast() {
-  const p = parseCoords($('fc-pos').value);
-  if (!p) {
-    paintFc('Не бачу координат. Потрібні цифри на кшталт «48.51, 37.98» або посилання з Google Maps. Коротке посилання maps.app.goo.gl не підходить — скопіюй самі цифри.', 'warn');
+  const text = $('fc-pos').value.trim();
+  const p = parseCoords(text);
+  if (p) return forecastAt(p);
+  if (/\p{L}{2}/u.test(text) && !/https?:|goo\.gl/i.test(text)) return findByName(text);
+  paintFc('Не бачу ні координат, ні назви. Потрібна назва населеного пункту, цифри на кшталт «48.51, 37.98» або посилання з Google Maps. Коротке посилання maps.app.goo.gl не підходить — скопіюй самі цифри.', 'warn');
+}
+
+/** Назва замість координат: один збіг — одразу прогноз, кілька — вибір. */
+async function findByName(text) {
+  paintFc(`Шукаю «${text}»…`);
+  let hits;
+  try {
+    hits = await findPlaces(text);
+  } catch {
+    paintFc(navigator.onLine ? 'Пошук не відповів. Спробуй ще раз.' : 'Немає мережі — пошук не працює.', 'warn');
     return;
   }
+  if (!hits.length) { paintFc(`«${text}» не знайшов. Перевір назву або введи координати.`, 'warn'); return; }
+  if (hits.length === 1) { forecastAt(hits[0]); return; }
+  $('fc-out').replaceChildren(el('p', { class: 'note' }, 'Кілька збігів — вибери:'),
+    el('ul', { class: 'place-list' }, hits.map((h) => el('li', {},
+      el('button', { type: 'button', onclick: () => forecastAt(h) }, h.name, el('span', {}, h.where))))));
+}
+
+async function forecastAt(p) {
   const c = coarse(p);
-  state.pos = $('fc-pos').value = `${c.lat}, ${c.lon}`;
+  state.pos = $('fc-pos').value = posText(c);
   save();
   const btn = $('fc-get');
   btn.disabled = true;
@@ -113,12 +159,21 @@ function paintFc(msg, cls = '') {
   if (msg) { out.replaceChildren(el('p', { class: `note ${cls}` }, msg)); return; }
   if (!fc) { out.replaceChildren(); return; }
   const age = fcAge(fc);
-  const z0 = z0Of(state.terrain);
+  const f = fcNow();
+  // Нижче 10 м — як над відкритим місцем: місцевість з прогнозом не задаємо
+  const z0 = z0Of('open');
   const H = state.height;
-  const rows = [...fc.levels.map((l) => [l.z, l.speed, l.dir]), [H, levelWind(fc.levels, H, z0).speed, levelWind(fc.levels, H, z0).dir]]
+  const rows = [...f.levels.map((l) => [l.z, l.speed, l.dir]), [H, levelWind(f.levels, H, z0).speed, levelWind(f.levels, H, z0).dir]]
     .sort((a, b) => a[0] - b[0]);
+  // Година вильоту: «зараз» і наступні повні години — у кожної свій вітер
+  const hours = fc.hours?.length > 1 ? el('div', { class: 'chips fc-hours', role: 'group', 'aria-label': 'На яку годину' },
+    fc.hours.map((h, i) => el('button', {
+      type: 'button', class: i === state.fcHour ? 'on' : null, 'aria-pressed': String(i === state.fcHour),
+      onclick: () => { state.fcHour = i; changed(); },
+    }, i ? h.time.slice(11, 16) : 'Зараз'))) : null;
   out.replaceChildren(
-    el('p', { class: `note${age.stale ? ' warn' : ''}` }, `Прогноз на ${fc.time.slice(11, 16)}, отримано ${age.text}${age.stale ? ' — застарів, онови' : ''} · пориви біля землі до ${fmt(fc.gust10)} м/с · ${fmt(fc.tempC, 0)} °C, ${fmt(fc.pressure, 0)} гПа`),
+    hours ? el('div', { class: 'label' }, 'На коли') : '', hours || '',
+    el('p', { class: `note${age.stale ? ' warn' : ''}` }, `Прогноз на ${f.time.slice(11, 16)}, отримано ${age.text}${age.stale ? ' — застарів, онови' : ''} · пориви біля землі до ${fmt(f.gust10)} м/с · ${fmt(f.tempC, 0)} °C, ${fmt(f.pressure, 0)} гПа`),
     el('table', { class: 'table fc-table' },
       el('thead', {}, el('tr', {}, el('th', {}, 'Висота'), el('th', {}, 'Вітер, м/с'), el('th', {}, 'Звідки'), el('th', {}, 'Від носа'))),
       el('tbody', {}, rows.map(([z, sp, dir]) => el('tr', { class: z === H && !LEVELS.includes(H) ? 'cur' : '' },
@@ -487,7 +542,12 @@ function changed() {
 }
 
 // Вітер у розрахунку — той самий годинник, що й у тренажері; край шкали — 15 м/с
-const calcWind = windPicker({ get: () => state, set: (v) => { Object.assign(state, v); changed(); }, max: 15 });
+// Вітер на 10 м для сили w, заданої там, де виміряно, — за тим самим профілем, що й розрахунок
+const at10 = (w) => {
+  const a = meanWind(windSpec({ ...state, src: 'hand', wind: w }, state.height, null))(10);
+  return Math.hypot(a.x, a.y);
+};
+const calcWind = windPicker({ get: () => state, set: (v) => { Object.assign(state, v); changed(); }, max: 15, ground: at10 });
 
 function paintStatic() {
   calcWind.paint();
@@ -496,6 +556,9 @@ function paintStatic() {
   $('w-hand').hidden = state.src !== 'hand';
   $('w-fc').hidden = state.src !== 'fc';
   $('w-ref-note').hidden = state.ref !== '2';
+  $('w-terr').hidden = state.src === 'fc';
+  $('w-meas-box').hidden = !(state.meas > 0);
+  for (const b of $('w-head').querySelectorAll('button')) b.classList.toggle('on', +b.dataset.v === (state.heading || 0));
   if (state.src === 'fc') paintFc(fc ? '' : 'Прогнозу ще немає: встав координати й натисни «Прогноз». Поки рахую з ручного вітру.');
   const s = params();
   const w = windAt(s, state.height), g = gustStats(s);
@@ -506,13 +569,13 @@ function paintStatic() {
   $('speed-hint').textContent = state.speed ? '' : '· зависання';
   for (const k of ['tempC', 'elevation']) $(`f-${k}`).disabled = on;
   $('air-sum').textContent = on
-    ? `Повітря з прогнозу: ${fmt(fc.tempC, 0)} °C, ${fmt(fc.pressure, 0)} гПа — поля вище не діють.`
+    ? `Повітря з прогнозу: ${fmt(fcNow().tempC, 0)} °C, ${fmt(fcNow().pressure, 0)} гПа — поля вище не діють.`
     : 'Холодне й низинне повітря щільніше — гальмує вантаж сильніше.';
   // На кнопках умов — коротко, що зараз стоїть
   $('ct-drop').textContent = `${fmt(state.height, 0)} м · ${state.speed ? `${fmt(state.speed)} м/с` : 'висить'}`;
   $('ct-wind').textContent = w.speed > 0.05 ? `${fmt(w.speed)} м/с${on ? ' · прогноз' : ''}` : 'штиль';
-  $('ct-load').textContent = currentLoad().name;
-  $('ct-air').textContent = on ? `${fmt(fc.tempC, 0)} °C · прогноз` : `${fmt(state.tempC, 0)} °C · ${fmt(state.elevation, 0)} м`;
+  $('ct-load').textContent = `${currentLoad().name}${state.delay ? ` · +${fmt(state.delay, 2)} с` : ''}`;
+  $('ct-air').textContent = on ? `${fmt(fcNow().tempC, 0)} °C · прогноз` : `${fmt(state.tempC, 0)} °C · ${fmt(state.elevation, 0)} м`;
   for (const b of document.querySelectorAll('.calc-tool')) b.classList.toggle('hot', b.dataset.key === 'wind' && w.speed > 0.05);
 }
 
@@ -541,7 +604,7 @@ function syncForm() {
     const k = field.dataset.key;
     $(`r-${k}`).value = $(`f-${k}`).value = state[k];
   }
-  for (const k of ['heading', 'meas']) $(`f-${k}`).value = state[k] || '';
+  for (const k of ['heading', 'meas']) $(`f-${k}`).value = fieldVal(k);
   for (const k of ['tempC', 'elevation']) $(`f-${k}`).value = state[k];
   $('fc-pos').value = state.pos;
   fc = loadFc();

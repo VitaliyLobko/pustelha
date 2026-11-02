@@ -9,7 +9,10 @@ const WIND_SIGNS = [
   [6, 'піднімає пил і папір, гойдаються невеликі гілки, трава лягає хвилями'],
   [Infinity, 'гойдаються невеликі дерева, гілки шумлять'],
 ];
-const WIND_QUICK = [[0, 'штиль'], [2, 'дим'], [4, 'листя'], [6, 'пил'], [8, 'дерева']];
+const WIND_QUICK = [0, 2, 4, 6, 8];
+// Короткі підписи ознак — за тими самими межами, що й WIND_SIGNS
+const SHORT = [[0.3, 'штиль'], [2, 'дим'], [4, 'листя'], [6, 'пил'], [Infinity, 'дерева']];
+const short = (g) => SHORT.find(([top]) => g <= top)[1];
 // Ручка сили: від R0 (ледь дме) до R0 + RS (край шкали) в одиницях циферблата; R0 — одразу за значком дрона
 const R0 = 11;
 const RS = 26;
@@ -28,8 +31,9 @@ const DRONE = `<g class="wp-drone">
 /**
  * Тап по годині — звідки дме, тягни від центру — сила (край = max), кнопки швидкого вибору з ознаками.
  * get() → { clock, wind }, set({ clock?, wind? }) — зміна стану; повертає { el, paint }.
+ * ground(w) — вітер на 10 м для сили w там, де її виміряно: ознаки (дим, листя) — про вітер біля землі, а не на висоті.
  */
-export function windPicker({ get, set, max = 10 }) {
+export function windPicker({ get, set, max = 10, ground = (w) => w }) {
   const dial = el('div', { class: 'wind-pick', role: 'radiogroup', 'aria-label': 'Звідки дме вітер' });
   const setClock = (n) => {
     const { clock, wind } = get();
@@ -95,8 +99,8 @@ export function windPicker({ get, set, max = 10 }) {
       setForce(Math.min(max, Math.max(0, get().wind + step)));
     },
   });
-  const quick = WIND_QUICK.filter(([v]) => v <= max).map(([v, sign]) => el('button', { type: 'button', onclick: () => setForce(v) },
-    el('b', {}, fmt(v, 0)), el('small', {}, sign)));
+  const quick = WIND_QUICK.filter((v) => v <= max).map((v) => el('button', { type: 'button', onclick: () => setForce(v) },
+    el('b', {}, fmt(v, 0)), el('small', {})));
   dial.append(face, pad, ...hours);
 
   const paint = () => {
@@ -119,10 +123,15 @@ export function windPicker({ get, set, max = 10 }) {
     dial.classList.toggle('calm', w === 0);
     pad.setAttribute('aria-valuenow', String(w));
     pad.setAttribute('aria-valuetext', `${fmt(w)} м/с`);
-    quick.forEach((b, i) => b.setAttribute('aria-pressed', String(WIND_QUICK[i][0] === w)));
+    quick.forEach((b, i) => {
+      b.setAttribute('aria-pressed', String(WIND_QUICK[i] === w));
+      b.querySelector('small').textContent = short(ground(WIND_QUICK[i]));
+    });
     note.textContent = w === 0 ? 'Штиль' : `${fmt(w, w % 1 ? 1 : 0)} м/с ${clockWord(v)}`;
+    const g = ground(w);
+    // Ознаки — за вітром на 10 м: якщо силу задано на висоті дрона, біля землі він слабший
     more.textContent = w > 0
-      ? `Як виглядає біля землі: ${WIND_SIGNS.find(([top]) => w <= top)[1]}. На висоті дме сильніше.`
+      ? `Біля землі ${Math.abs(g - w) >= 0.1 ? `≈ ${fmt(g)} м/с — ` : ''}${WIND_SIGNS.find(([top]) => g <= top)[1]}.`
       : `Тягни від центру — сила вітру, край — ${fmt(max, 0)} м/с.`;
   };
   paint();
